@@ -1,10 +1,9 @@
 #!/bin/bash
-echo "Setting up the filesystem."
-echo $STACKATO_FILESYSTEM
 
 if [ -d $STACKATO_FILESYSTEM ]
   then
-    echo "Found a persistent filesystem"
+    echo "Found a persistent filesystem at: "
+    echo $STACKATO_FILESYSTEM
     if ! [ -d $STACKATO_FILESYSTEM/files ]
       then
         echo "No Drupal files in $STACKATO_FILESYSTEM."
