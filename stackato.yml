@@ -1,0 +1,15 @@
+name: drupal
+instances: 1
+framework: php
+mem: 256M
+services:
+#  dev-db: mysql
+#  dev-fs: filesystem
+#  prod-db: mysql
+#  prod-fs: filesystem
+  drupal8-db: mysql
+  drupal8-fs: filesystem
+
+hooks:
+  pre-running:
+    - sh stackato-setup.sh  
