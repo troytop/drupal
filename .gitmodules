@@ -1,0 +1,3 @@
+[submodule "sites/all/modules/mollom"]
+	path = sites/all/modules/mollom
+	url = http://git.drupal.org/project/mollom.git
