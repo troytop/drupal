@@ -1,0 +1,13 @@
+name: drupal
+instances: 1
+framework: php
+mem: 256M
+min_version:
+  client: 1.4.3
+  server: 1.0
+services:
+  ${name}-db: mysql
+  ${name}-fs: filesystem
+hooks:
+  pre-running:
+    - sh stackato-setup.sh  
