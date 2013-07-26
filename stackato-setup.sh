@@ -20,3 +20,4 @@ if [ -d $STACKATO_FILESYSTEM ]
     echo "No persistent filesystem found, using ephemeral disk."
     echo "Warning: user content will be lost on restart."
 fi
+
