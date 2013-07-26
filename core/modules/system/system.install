@@ -4,8 +4,9 @@
  * @file
  * Install, update and uninstall functions for the system module.
  */
+
 use Drupal\Component\Utility\Crypt;
-use Drupal\Core\Config\FileStorage;
+use Drupal\Component\Uuid\Uuid;
 use Drupal\Core\Database\Database;
 use Drupal\Core\Language\Language;
 
@@ -965,8 +966,7 @@ function system_schema() {
       ),
     ),
     'indexes' => array(
-      'fit' => array('fit'),
-      'pattern_outline' => array('pattern_outline'),
+      'pattern_outline_fit' => array('pattern_outline', 'fit'),
       'route_set' => array('route_set'),
     ),
     'primary key' => array('name'),
@@ -1622,8 +1622,7 @@ function system_update_8022() {
       ),
     ),
     'indexes' => array(
-      'fit' => array('fit'),
-      'pattern_outline' => array('pattern_outline'),
+      'pattern_outline_fit' => array('pattern_outline', 'fit'),
       'route_set' => array('route_set'),
     ),
     'primary key' => array('name'),
@@ -1880,33 +1879,51 @@ function system_update_8044() {
 
 /**
  * Convert existing date formats to the new config system.
+ *
+ * @ingroup config_upgrade
  */
 function system_update_8045() {
-  // Get the date config object.
-  $config = config('system.date');
-
+  $uuid = new Uuid();
   // Fetch all date types from {date_format_type}.
   $date_formats = db_query('SELECT * FROM {date_format_type}')->fetchAllAssoc('type', PDO::FETCH_ASSOC);
   if (!empty($date_formats)) {
     foreach ($date_formats as $type => $format) {
       // Set name and locked properties.
-      $config->set("formats.{$type}.name", $format['title']);
-      $config->set("formats.{$type}.locked", $format['locked']);
+      $config = config("system.date_format.$type")
+        ->set('id', $type)
+        ->set('label', $format['title'])
+        ->set('locked', $format['locked'])
+        ->set('status', 1)
+        ->set('uuid', $uuid->generate());
 
       // Get the default date format for this type.
       $variable_name = 'date_format_' . $type;
       $default_format = update_variable_get($variable_name, NULL);
       if ($default_format) {
         // In Drupal 7 we only used PHP date types.
-        $config->set("formats.{$type}.pattern.php", $default_format);
+        $config->set('pattern.php', $default_format);
 
         // Delete the migrated variables.
         update_variable_del($variable_name);
       }
+      // Save the date configuration object.
+      $config->save();
     }
+  }
 
-    // Save the date configuration object.
-    $config->save();
+  // Install the new HTML date formats.
+  $new_formats = array(
+    'system.date_format.fallback',
+    'system.date_format.html_date',
+    'system.date_format.html_datetime',
+    'system.date_format.html_month',
+    'system.date_format.html_time',
+    'system.date_format.html_week',
+    'system.date_format.html_year',
+    'system.date_format.html_yearless_date',
+  );
+  foreach ($new_formats as $new_format) {
+    update_install_default_config('module', $new_format);
   }
 }
 
@@ -1914,28 +1931,13 @@ function system_update_8045() {
  * Install new default views.
  */
 function system_update_8046() {
-  $config_to_import = array(
-    'views.view.user_admin_people' => 'user',
-    'views.view.content' => 'node',
-  );
+  update_install_default_config('module', 'views.view.user_admin_people', 'user');
+  update_install_default_config('module', 'views.view.content', 'node');
+
   $front_page = config('system.site')->get('page.front') ?: 'node';
   if ($front_page == 'node') {
     // This imports the node frontpage view.
-    $config_to_import['views.view.frontpage'] = 'node';
-  }
-  foreach ($config_to_import as $config_name => $module) {
-    $module_config_path = drupal_get_path('module', $module) . '/config';
-    $module_filestorage = new FileStorage($module_config_path);
-    $config_storage = drupal_container()->get('config.storage');
-    // If this file already exists, something in the upgrade path went
-    // completely wrong and we want to know.
-    if ($config_storage->exists($config_name)) {
-      throw new ConfigException(format_string('Default configuration file @name of @module module unexpectedly exists already before the module was installed.', array(
-        '@module' => $module,
-        '@name' => $config_name,
-      )));
-    }
-    $config_storage->write($config_name, $module_filestorage->read($config_name));
+    update_install_default_config('module', 'views.view.frontpage', 'node');
   }
 }
 
@@ -2109,7 +2111,7 @@ function system_update_8054() {
  */
 function system_update_8055() {
   // Install the global theme settings from the system module.
-  update_7_to_8_install_default_config('module', 'system.theme.global');
+  update_install_default_config('module', 'system.theme.global');
   // Add the global settings to a map for variable to configuration conversion.
   $theme_settings_to_config_map = array('theme_settings' => 'system.theme.global');
 
@@ -2129,7 +2131,7 @@ function system_update_8055() {
     $variable = 'theme_' . $theme . '_settings';
     $config_name = $theme . '.settings';
     $theme_settings_to_config_map[$variable] = $config_name;
-    update_7_to_8_install_default_config('theme', $config_name);
+    update_install_default_config('theme', $config_name);
   }
 
   // Convert array of theme settings from Drupal 7's variable system to Drupal
@@ -2164,9 +2166,6 @@ function system_update_8056() {
       'search_result' => 'Search result',
       'print' => 'Print',
     ),
-    'file' => array(
-      'full' => 'File default',
-    ),
     'comment' => array(
       'full' => 'Full comment',
     ),
@@ -2176,9 +2175,6 @@ function system_update_8056() {
     ),
     'taxonomy_term' => array(
       'full' => 'Taxonomy term page',
-    ),
-    'taxonomy_vocabulary' => array(
-      'full' => 'Taxonomy vocabulary',
     ),
   );
 

@@ -2262,8 +2262,8 @@ function form_test_user_register_form_rebuild($form, &$form_state) {
 function form_test_two_instances() {
   global $user;
   $node1 = entity_create('node', array(
-    'uid' => $user->uid,
-    'name' => (isset($user->name) ? $user->name : ''),
+    'uid' => $user->id(),
+    'name' => $user->getUsername(),
     'type' => 'page',
     'langcode' => Language::LANGCODE_NOT_SPECIFIED,
   ));

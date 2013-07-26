@@ -9,6 +9,10 @@ namespace Drupal\field\Plugin\Type\Formatter;
 
 use Drupal\Component\Plugin\PluginManagerBase;
 use Drupal\Component\Plugin\Factory\DefaultFactory;
+use Drupal\Core\Cache\CacheBackendInterface;
+use Drupal\Core\Extension\ModuleHandlerInterface;
+use Drupal\Core\Language\LanguageManager;
+use Drupal\Core\Plugin\DefaultPluginManager;
 use Drupal\Core\Plugin\Discovery\CacheDecorator;
 use Drupal\Core\Plugin\Discovery\AnnotatedClassDiscovery;
 use Drupal\Core\Plugin\Discovery\AlterDecorator;
@@ -17,7 +21,7 @@ use Drupal\field\Plugin\Core\Entity\FieldInstance;
 /**
  * Plugin type manager for field formatters.
  */
-class FormatterPluginManager extends PluginManagerBase {
+class FormatterPluginManager extends DefaultPluginManager {
 
   /**
    * An array of formatter options for each field type.
@@ -31,13 +35,21 @@ class FormatterPluginManager extends PluginManagerBase {
    *
    * @param \Traversable $namespaces
    *   An object that implements \Traversable which contains the root paths
-   *   keyed by the corresponding namespace to look for plugin implementations,
+   *   keyed by the corresponding namespace to look for plugin implementations.
+   * @param \Drupal\Core\Cache\CacheBackendInterface $cache_backend
+   *   Cache backend instance to use.
+   * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
+   *   The module handler.
+   * @param \Drupal\Core\Language\LanguageManager $language_manager
+   *   The language manager.
    */
-  public function __construct(\Traversable $namespaces) {
+  public function __construct(\Traversable $namespaces, CacheBackendInterface $cache_backend, ModuleHandlerInterface $module_handler, LanguageManager $language_manager) {
     $annotation_namespaces = array('Drupal\field\Annotation' => $namespaces['Drupal\field']);
-    $this->discovery = new AnnotatedClassDiscovery('field/formatter', $namespaces, $annotation_namespaces, 'Drupal\field\Annotation\FieldFormatter');
-    $this->discovery = new AlterDecorator($this->discovery, 'field_formatter_info');
-    $this->discovery = new CacheDecorator($this->discovery, 'field_formatter_types', 'field');
+
+    parent::__construct('Plugin/field/formatter', $namespaces, $annotation_namespaces, 'Drupal\field\Annotation\FieldFormatter');
+
+    $this->setCacheBackend($cache_backend, $language_manager, 'field_formatter_types');
+    $this->alterInfo($module_handler, 'field_formatter_info');
   }
 
   /**
@@ -46,6 +58,15 @@ class FormatterPluginManager extends PluginManagerBase {
   public function createInstance($plugin_id, array $configuration) {
     $plugin_definition = $this->discovery->getDefinition($plugin_id);
     $plugin_class = DefaultFactory::getPluginClass($plugin_id, $plugin_definition);
+
+    // @todo This is copied from \Drupal\Core\Plugin\Factory\ContainerFactory.
+    //   Find a way to restore sanity to
+    //   \Drupal\field\Plugin\Type\Formatter\FormatterBase::__construct().
+    // If the plugin provides a factory method, pass the container to it.
+    if (is_subclass_of($plugin_class, 'Drupal\Core\Plugin\ContainerFactoryPluginInterface')) {
+      return $plugin_class::create(\Drupal::getContainer(), $configuration, $plugin_id, $plugin_definition);
+    }
+
     return new $plugin_class($plugin_id, $plugin_definition, $configuration['field_definition'], $configuration['settings'], $configuration['label'], $configuration['view_mode']);
   }
 

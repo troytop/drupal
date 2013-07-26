@@ -50,7 +50,7 @@ abstract class ContentTranslationUITest extends ContentTranslationTestBase {
     $values[$default_langcode] = $this->getNewEntityValues($default_langcode);
     $this->entityId = $this->createEntity($values[$default_langcode], $default_langcode);
     $entity = entity_load($this->entityType, $this->entityId, TRUE);
-    $this->assertTrue($entity, t('Entity found in the database.'));
+    $this->assertTrue($entity, 'Entity found in the database.');
 
     $translation = $this->getTranslation($entity, $default_langcode);
     foreach ($values[$default_langcode] as $property => $value) {
@@ -165,11 +165,11 @@ abstract class ContentTranslationUITest extends ContentTranslationTestBase {
     foreach ($this->langcodes as $index => $langcode) {
       $user = $this->drupalCreateUser();
       $values[$langcode] = array(
-        'uid' => $user->uid,
+        'uid' => $user->id(),
         'created' => REQUEST_TIME - mt_rand(0, 1000),
       );
       $edit = array(
-        'content_translation[name]' => $user->name,
+        'content_translation[name]' => $user->getUsername(),
         'content_translation[created]' => format_date($values[$langcode]['created'], 'custom', 'Y-m-d H:i:s O'),
       );
       $prefix = $index > 0 ? $langcode . '/' : '';

@@ -168,15 +168,6 @@ class EntityNG extends Entity {
   }
 
   /**
-   * Gets the typed data type of the entity.
-   *
-   * @return string
-   */
-  public function getType() {
-    return $this->entityType;
-  }
-
-  /**
    * Initialize the object. Invoked upon construction and wake up.
    */
   protected function init() {
@@ -422,6 +413,11 @@ class EntityNG extends Entity {
    * {@inheritdoc}
    */
   public function access($operation = 'view', AccountInterface $account = NULL) {
+    if ($operation == 'create') {
+      return \Drupal::entityManager()
+        ->getAccessController($this->entityType)
+        ->createAccess($this->bundle(), $account);
+    }
     return \Drupal::entityManager()
       ->getAccessController($this->entityType)
       ->access($this, $operation, $this->activeLangcode, $account);
@@ -458,7 +454,7 @@ class EntityNG extends Entity {
       }
       if (empty($this->language)) {
         // Make sure we return a proper language object.
-        $this->language = new Language(array('id' => Language::LANGCODE_NOT_SPECIFIED));
+        $this->language = new Language(array('id' => Language::LANGCODE_NOT_SPECIFIED, 'locked' => TRUE));
       }
     }
     return $this->language;
@@ -839,14 +835,6 @@ class EntityNG extends Entity {
       $label = $this->{$entity_info['entity_keys']['label']}->value;
     }
     return $label;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function validate() {
-    // @todo: Add the typed data manager as proper dependency.
-    return \Drupal::typedData()->getValidator()->validate($this);
   }
 
 }

@@ -203,10 +203,7 @@ function content_translation_menu() {
   $items['admin/config/regional/content_translation/translatable/%'] = array(
     'title' => 'Confirm change in translatability.',
     'description' => 'Confirm page for changing field translatability.',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => array('content_translation_translatable_form', 5),
-    'access arguments' => array('administer content translation'),
-    'file' => 'content_translation.admin.inc',
+    'route_name' => 'content_translation_translatable',
   );
 
   return $items;
@@ -733,7 +730,7 @@ function content_translation_entity_insert(EntityInterface $entity) {
 
     $translation += array(
       'source' => '',
-      'uid' => $GLOBALS['user']->uid,
+      'uid' => $GLOBALS['user']->id(),
       'outdated' => FALSE,
       'status' => TRUE,
       'created' => REQUEST_TIME,
@@ -937,7 +934,7 @@ function content_translation_language_configuration_element_process(array $eleme
       '#prefix' => '<label>' . t('Translation') . '</label>',
     );
 
-    $form['#submit'][] = 'content_translation_language_configuration_element_submit';
+    $form['actions']['submit']['#submit'][] = 'content_translation_language_configuration_element_submit';
   }
   return $element;
 }

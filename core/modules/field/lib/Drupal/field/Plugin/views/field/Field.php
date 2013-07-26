@@ -393,7 +393,6 @@ class Field extends FieldPluginBase {
         '#options' => drupal_map_assoc($column_names),
         '#default_value' => $this->options['click_sort_column'],
         '#description' => t('Used by Style: Table to determine the actual column to click sort the field on. The default is usually fine.'),
-        '#fieldset' => 'more',
       );
     }
 
@@ -625,12 +624,13 @@ class Field extends FieldPluginBase {
         return implode(filter_xss_admin($this->options['separator']), $items);
       }
       else {
-        return theme('item_list',
-          array(
-            'items' => $items,
-            'title' => NULL,
-            'list_type' => $this->options['multi_type'],
-          ));
+        $item_list = array(
+          '#theme' => 'item_list',
+          '#items' => $items,
+          '#title' => NULL,
+          '#list_type' => $this->options['multi_type'],
+        );
+        return drupal_render($item_list);
       }
     }
   }

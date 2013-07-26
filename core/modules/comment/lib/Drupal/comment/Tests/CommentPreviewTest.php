@@ -52,13 +52,13 @@ class CommentPreviewTest extends CommentTestBase {
     $edit['signature[value]'] = '<a href="http://example.com/">' . $test_signature. '</a>';
     $image = current($this->drupalGetTestFiles('image'));
     $edit['files[user_picture_und_0]'] = drupal_realpath($image->uri);
-    $this->drupalPost('user/' . $this->web_user->uid . '/edit', $edit, t('Save'));
+    $this->drupalPost('user/' . $this->web_user->id() . '/edit', $edit, t('Save'));
 
     // As the web user, fill in the comment form and preview the comment.
     $edit = array();
     $edit['subject'] = $this->randomName(8);
     $edit['comment_body[' . $langcode . '][0][value]'] = $this->randomName(16);
-    $this->drupalPost('node/' . $this->node->nid, $edit, t('Preview'));
+    $this->drupalPost('node/' . $this->node->id(), $edit, t('Preview'));
 
     // Check that the preview is displaying the title and body.
     $this->assertTitle(t('Preview comment | Drupal'), 'Page title is "Preview comment".');
@@ -92,7 +92,7 @@ class CommentPreviewTest extends CommentTestBase {
     $date = new DrupalDateTime('2008-03-02 17:23');
     $edit['subject'] = $this->randomName(8);
     $edit['comment_body[' . $langcode . '][0][value]'] = $this->randomName(16);
-    $edit['name'] = $web_user->name;
+    $edit['name'] = $web_user->getUsername();
     $edit['date[date]'] = $date->format('Y-m-d');
     $edit['date[time]'] = $date->format('H:i:s');
     $raw_date = $date->getTimestamp();

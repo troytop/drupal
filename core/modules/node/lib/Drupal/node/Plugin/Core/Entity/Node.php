@@ -28,6 +28,7 @@ use Drupal\node\NodeBCDecorator;
  *     "access" = "Drupal\node\NodeAccessController",
  *     "form" = {
  *       "default" = "Drupal\node\NodeFormController",
+ *       "delete" = "Drupal\node\Form\NodeDeleteForm",
  *       "edit" = "Drupal\node\NodeFormController"
  *     },
  *     "translation" = "Drupal\node\NodeTranslationController"
@@ -115,7 +116,7 @@ class Node extends EntityNG implements NodeInterface {
     // default revision. There's no need to delete existing records if the node
     // is new.
     if ($this->isDefaultRevision()) {
-      node_access_acquire_grants($this->getBCEntity(), $update);
+      \Drupal::entityManager()->getAccessController('node')->writeGrants($this->getBCEntity(), $update);
     }
   }
 

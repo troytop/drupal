@@ -49,7 +49,7 @@ class AccessDeniedTest extends WebTestBase {
     // Use a custom 403 page.
     $this->drupalLogin($this->admin_user);
     $edit = array(
-      'site_403' => 'user/' . $this->admin_user->uid,
+      'site_403' => 'user/' . $this->admin_user->id(),
     );
     $this->drupalPost('admin/config/system/site-information', $edit, t('Save configuration'));
 
@@ -59,7 +59,7 @@ class AccessDeniedTest extends WebTestBase {
     // Log out and check that the user login block is shown on custom 403 pages.
     $this->drupalLogout();
     $this->drupalGet('admin');
-    $this->assertText($this->admin_user->name, 'Found the custom 403 page');
+    $this->assertText($this->admin_user->getUsername(), 'Found the custom 403 page');
     $this->assertText(t('Username'), 'Blocks are shown on the custom 403 page');
 
     // Log back in and remove the custom 403 page.
@@ -82,12 +82,12 @@ class AccessDeniedTest extends WebTestBase {
     $edit = array(
       'region' => -1,
     );
-    $this->drupalPost('admin/structure/block/manage/stark.login/configure', $edit, t('Save block'));
+    $this->drupalPost('admin/structure/block/manage/stark.login', $edit, t('Save block'));
 
     // Check that we can log in from the 403 page.
     $this->drupalLogout();
     $edit = array(
-      'name' => $this->admin_user->name,
+      'name' => $this->admin_user->getUsername(),
       'pass' => $this->admin_user->pass_raw,
     );
     $this->drupalPost('admin/config/system/site-information', $edit, t('Log in'));

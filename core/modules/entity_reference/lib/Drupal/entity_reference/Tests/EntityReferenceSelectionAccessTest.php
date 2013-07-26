@@ -126,8 +126,8 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'article' => array(
-            $nodes['published1']->nid => $node_labels['published1'],
-            $nodes['published2']->nid => $node_labels['published2'],
+            $nodes['published1']->id() => $node_labels['published1'],
+            $nodes['published2']->id() => $node_labels['published2'],
           ),
         ),
       ),
@@ -138,7 +138,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'article' => array(
-            $nodes['published1']->nid => $node_labels['published1'],
+            $nodes['published1']->id() => $node_labels['published1'],
           ),
         ),
       ),
@@ -149,7 +149,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'article' => array(
-            $nodes['published2']->nid => $node_labels['published2'],
+            $nodes['published2']->id() => $node_labels['published2'],
           ),
         ),
       ),
@@ -178,9 +178,9 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'article' => array(
-            $nodes['published1']->nid => $node_labels['published1'],
-            $nodes['published2']->nid => $node_labels['published2'],
-            $nodes['unpublished']->nid => $node_labels['unpublished'],
+            $nodes['published1']->id() => $node_labels['published1'],
+            $nodes['published2']->id() => $node_labels['published2'],
+            $nodes['unpublished']->id() => $node_labels['unpublished'],
           ),
         ),
       ),
@@ -190,7 +190,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'article' => array(
-            $nodes['unpublished']->nid => $node_labels['unpublished'],
+            $nodes['unpublished']->id() => $node_labels['unpublished'],
           ),
         ),
       ),
@@ -260,7 +260,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         $account = $values;
       }
       $users[$key] = $account;
-      $user_labels[$key] = check_plain($account->name);
+      $user_labels[$key] = check_plain($account->getUsername());
     }
 
     // Test as a non-admin.
@@ -272,8 +272,8 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'user' => array(
-            $users['admin']->uid => $user_labels['admin'],
-            $users['non_admin']->uid => $user_labels['non_admin'],
+            $users['admin']->id() => $user_labels['admin'],
+            $users['non_admin']->id() => $user_labels['non_admin'],
           ),
         ),
       ),
@@ -284,7 +284,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'user' => array(
-            $users['non_admin']->uid => $user_labels['non_admin'],
+            $users['non_admin']->id() => $user_labels['non_admin'],
           ),
         ),
       ),
@@ -311,10 +311,10 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'user' => array(
-            $users['anonymous']->uid => $user_labels['anonymous'],
-            $users['admin']->uid => $user_labels['admin'],
-            $users['non_admin']->uid => $user_labels['non_admin'],
-            $users['blocked']->uid => $user_labels['blocked'],
+            $users['anonymous']->id() => $user_labels['anonymous'],
+            $users['admin']->id() => $user_labels['admin'],
+            $users['non_admin']->id() => $user_labels['non_admin'],
+            $users['blocked']->id() => $user_labels['blocked'],
           ),
         ),
       ),
@@ -324,7 +324,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'user' => array(
-            $users['blocked']->uid => $user_labels['blocked'],
+            $users['blocked']->id() => $user_labels['blocked'],
           ),
         ),
       ),
@@ -335,7 +335,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         ),
         'result' => array(
           'user' => array(
-            $users['anonymous']->uid => $user_labels['anonymous'],
+            $users['anonymous']->id() => $user_labels['anonymous'],
           ),
         ),
       ),
@@ -396,7 +396,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
 
     $comment_values = array(
       'published_published' => array(
-        'nid' => $nodes['published']->nid,
+        'nid' => $nodes['published']->id(),
         'uid' => 1,
         'cid' => NULL,
         'pid' => 0,
@@ -405,7 +405,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         'language' => Language::LANGCODE_NOT_SPECIFIED,
       ),
       'published_unpublished' => array(
-        'nid' => $nodes['published']->nid,
+        'nid' => $nodes['published']->id(),
         'uid' => 1,
         'cid' => NULL,
         'pid' => 0,
@@ -414,7 +414,7 @@ class EntityReferenceSelectionAccessTest extends WebTestBase {
         'language' => Language::LANGCODE_NOT_SPECIFIED,
       ),
       'unpublished_published' => array(
-        'nid' => $nodes['unpublished']->nid,
+        'nid' => $nodes['unpublished']->id(),
         'uid' => 1,
         'cid' => NULL,
         'pid' => 0,

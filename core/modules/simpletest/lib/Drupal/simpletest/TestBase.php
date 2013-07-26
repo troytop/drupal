@@ -2,7 +2,7 @@
 
 /**
  * @file
- * Definition of Drupal\simpletest\TestBase.
+ * Definition of \Drupal\simpletest\TestBase.
  */
 
 namespace Drupal\simpletest;
@@ -23,8 +23,8 @@ use ReflectionObject;
 /**
  * Base class for Drupal tests.
  *
- * Do not extend this class directly, use either Drupal\simpletest\WebTestBaseBase
- * or Drupal\simpletest\UnitTestBaseBase.
+ * Do not extend this class directly, use either
+ * \Drupal\simpletest\WebTestBaseBase or \Drupal\simpletest\UnitTestBaseBase.
  */
 abstract class TestBase {
   /**
@@ -159,9 +159,9 @@ abstract class TestBase {
   /**
    * Whether to die in case any test assertion fails.
    *
-   * @see run-tests.sh
-   *
    * @var boolean
+   *
+   * @see run-tests.sh
    */
   public $dieOnFail = FALSE;
 
@@ -273,14 +273,14 @@ abstract class TestBase {
    * the test case has been destroyed, such as PHP fatal errors. The caller
    * information is not automatically gathered since the caller is most likely
    * inserting the assertion on behalf of other code. In all other respects
-   * the method behaves just like Drupal\simpletest\TestBase::assert() in terms
+   * the method behaves just like \Drupal\simpletest\TestBase::assert() in terms
    * of storing the assertion.
    *
    * @return
    *   Message ID of the stored assertion.
    *
-   * @see Drupal\simpletest\TestBase::assert()
-   * @see Drupal\simpletest\TestBase::deleteAssert()
+   * @see \Drupal\simpletest\TestBase::assert()
+   * @see \Drupal\simpletest\TestBase::deleteAssert()
    */
   public static function insertAssert($test_id, $test_class, $status, $message = '', $group = 'Other', array $caller = array()) {
     // Convert boolean status to string status.
@@ -316,10 +316,11 @@ abstract class TestBase {
    *
    * @param $message_id
    *   Message ID of the assertion to delete.
+   *
    * @return
    *   TRUE if the assertion was deleted, FALSE otherwise.
    *
-   * @see Drupal\simpletest\TestBase::insertAssert()
+   * @see \Drupal\simpletest\TestBase::insertAssert()
    */
   public static function deleteAssert($message_id) {
     return (bool) self::getDatabaseConnection()
@@ -331,7 +332,7 @@ abstract class TestBase {
   /**
    * Returns the database connection to the site running Simpletest.
    *
-   * @return Drupal\Core\Database\Connection
+   * @return \Drupal\Core\Database\Connection
    *   The database connection to use for inserting assertions.
    */
   public static function getDatabaseConnection() {
@@ -369,7 +370,9 @@ abstract class TestBase {
   }
 
   /**
-   * Check to see if a value is not false (not an empty string, 0, NULL, or FALSE).
+   * Check to see if a value is not false.
+   *
+   * False values are: empty string, 0, NULL, and FALSE.
    *
    * @param $value
    *   The value on which the assertion is to be done.
@@ -382,6 +385,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -390,7 +394,9 @@ abstract class TestBase {
   }
 
   /**
-   * Check to see if a value is false (an empty string, 0, NULL, or FALSE).
+   * Check to see if a value is false.
+   *
+   * False values are: empty string, 0, NULL, and FALSE.
    *
    * @param $value
    *   The value on which the assertion is to be done.
@@ -403,6 +409,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -424,6 +431,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -445,6 +453,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -468,6 +477,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -491,6 +501,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -514,6 +525,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -537,6 +549,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -590,6 +603,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE.
    */
@@ -609,6 +623,7 @@ abstract class TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   FALSE.
    */
@@ -630,6 +645,7 @@ abstract class TestBase {
    *   this default.
    * @param $caller
    *   The caller of the error.
+   *
    * @return
    *   FALSE.
    */
@@ -972,13 +988,13 @@ abstract class TestBase {
    * the test process still contains an old kernel and service container with an
    * old module list.
    *
+   * @see TestBase::prepareEnvironment()
+   * @see TestBase::tearDown()
+   *
    * @todo Fix http://drupal.org/node/1708692 so that module enable/disable
    *   changes are immediately reflected in drupal_container(). Until then,
    *   tests can invoke this workaround when requiring services from newly
    *   enabled modules to be immediately available in the same request.
-   *
-   * @see TestBase::prepareEnvironment()
-   * @see TestBase::tearDown()
    */
   protected function rebuildContainer() {
     $this->kernel = new DrupalKernel('testing', drupal_classloader(), FALSE);
@@ -989,7 +1005,7 @@ abstract class TestBase {
   }
 
   /**
-   * Deletes created files, database tables, and reverts all environment changes.
+   * Deletes created files, database tables, and reverts environment changes.
    *
    * This method needs to be invoked for both unit and integration tests.
    *
@@ -1083,6 +1099,7 @@ abstract class TestBase {
    * Handle errors during test runs.
    *
    * Because this is registered in set_error_handler(), it has to be public.
+   *
    * @see set_error_handler
    */
   public function errorHandler($severity, $message, $file = NULL, $line = NULL) {
@@ -1128,7 +1145,8 @@ abstract class TestBase {
       'line' => $exception->getLine(),
       'file' => $exception->getFile(),
     ));
-    // The exception message is run through check_plain() by _drupal_decode_exception().
+    // The exception message is run through check_plain()
+    // by _drupal_decode_exception().
     $decoded_exception = _drupal_decode_exception($exception);
     unset($decoded_exception['backtrace']);
     $message = format_string('%type: !message in %function (line %line of %file). <pre class="backtrace">!backtrace</pre>', $decoded_exception + array(

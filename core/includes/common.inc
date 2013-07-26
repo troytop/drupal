@@ -8,23 +8,17 @@ use Drupal\Component\Utility\Url;
 use Drupal\Component\Utility\Xss;
 use Drupal\Core\Cache\Cache;
 use Drupal\Core\Language\Language;
-use Symfony\Component\DependencyInjection\Container;
-use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\Yaml\Parser;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Request;
 use Drupal\Component\PhpStorage\PhpStorageFactory;
 use Drupal\Component\Utility\MapArray;
 use Drupal\Component\Utility\NestedArray;
-use Drupal\Component\Utility\Unicode;
 use Drupal\Core\Cache\CacheBackendInterface;
 use Drupal\Core\Datetime\DrupalDateTime;
-use Drupal\Core\Database\Database;
 use Drupal\Core\Routing\GeneratorNotInitializedException;
 use Drupal\Core\SystemListingInfo;
 use Drupal\Core\Template\Attribute;
-use Zend\Feed\Writer\Writer;
-use Zend\Feed\Reader\Reader;
 
 /**
  * @file
@@ -1800,154 +1794,6 @@ function drupal_sort_css_js($a, $b) {
 }
 
 /**
- * Grouping callback: Groups CSS items by their types, media, and browsers.
- *
- * This function arranges the CSS items that are in the #items property of the
- * styles element into groups. Arranging the CSS items into groups serves two
- * purposes. When aggregation is enabled, files within a group are aggregated
- * into a single file, significantly improving page loading performance by
- * minimizing network traffic overhead. When aggregation is disabled, grouping
- * allows multiple files to be loaded from a single STYLE tag, enabling sites
- * with many modules enabled or a complex theme being used to stay within IE's
- * 31 CSS inclusion tag limit: http://drupal.org/node/228818.
- *
- * This function puts multiple items into the same group if they are groupable
- * and if they are for the same 'media' and 'browsers'. Items of the 'file' type
- * are groupable if their 'preprocess' flag is TRUE, items of the 'inline' type
- * are always groupable, and items of the 'external' type are never groupable.
- * This function also ensures that the process of grouping items does not change
- * their relative order. This requirement may result in multiple groups for the
- * same type, media, and browsers, if needed to accommodate other items in
- * between.
- *
- * @param $css
- *   An array of CSS items, as returned by drupal_add_css(), but after
- *   alteration performed by drupal_get_css().
- *
- * @return
- *   An array of CSS groups. Each group contains the same keys (e.g., 'media',
- *   'data', etc.) as a CSS item from the $css parameter, with the value of
- *   each key applying to the group as a whole. Each group also contains an
- *   'items' key, which is the subset of items from $css that are in the group.
- *
- * @see drupal_pre_render_styles()
- * @see system_element_info()
- */
-function drupal_group_css($css) {
-  $groups = array();
-  // If a group can contain multiple items, we track the information that must
-  // be the same for each item in the group, so that when we iterate the next
-  // item, we can determine if it can be put into the current group, or if a
-  // new group needs to be made for it.
-  $current_group_keys = NULL;
-  // When creating a new group, we pre-increment $i, so by initializing it to
-  // -1, the first group will have index 0.
-  $i = -1;
-  foreach ($css as $item) {
-    // The browsers for which the CSS item needs to be loaded is part of the
-    // information that determines when a new group is needed, but the order of
-    // keys in the array doesn't matter, and we don't want a new group if all
-    // that's different is that order.
-    ksort($item['browsers']);
-
-    // If the item can be grouped with other items, set $group_keys to an array
-    // of information that must be the same for all items in its group. If the
-    // item can't be grouped with other items, set $group_keys to FALSE. We
-    // put items into a group that can be aggregated together: whether they will
-    // be aggregated is up to the _drupal_css_aggregate() function or an
-    // override of that function specified in hook_css_alter(), but regardless
-    // of the details of that function, a group represents items that can be
-    // aggregated. Since a group may be rendered with a single HTML tag, all
-    // items in the group must share the same information that would need to be
-    // part of that HTML tag.
-    switch ($item['type']) {
-      case 'file':
-        // Group file items if their 'preprocess' flag is TRUE.
-        // Help ensure maximum reuse of aggregate files by only grouping
-        // together items that share the same 'group' value and 'every_page'
-        // flag. See drupal_add_css() for details about that.
-        $group_keys = $item['preprocess'] ? array($item['type'], $item['group'], $item['every_page'], $item['media'], $item['browsers']) : FALSE;
-        break;
-      case 'inline':
-        // Always group inline items.
-        $group_keys = array($item['type'], $item['media'], $item['browsers']);
-        break;
-      case 'external':
-        // Do not group external items.
-        $group_keys = FALSE;
-        break;
-    }
-
-    // If the group keys don't match the most recent group we're working with,
-    // then a new group must be made.
-    if ($group_keys !== $current_group_keys) {
-      $i++;
-      // Initialize the new group with the same properties as the first item
-      // being placed into it. The item's 'data' and 'weight' properties are
-      // unique to the item and should not be carried over to the group.
-      $groups[$i] = $item;
-      unset($groups[$i]['data'], $groups[$i]['weight']);
-      $groups[$i]['items'] = array();
-      $current_group_keys = $group_keys ? $group_keys : NULL;
-    }
-
-    // Add the item to the current group.
-    $groups[$i]['items'][] = $item;
-  }
-  return $groups;
-}
-
-/**
- * Aggregation callback: Aggregates CSS files and inline content.
- *
- * Having the browser load fewer CSS files results in much faster page loads
- * than when it loads many small files. This function aggregates files within
- * the same group into a single file unless the site-wide setting to do so is
- * disabled (commonly the case during site development). To optimize download,
- * it also compresses the aggregate files by removing comments, whitespace, and
- * other unnecessary content. Additionally, this functions aggregates inline
- * content together, regardless of the site-wide aggregation setting.
- *
- * @param $css_groups
- *   An array of CSS groups as returned by drupal_group_css(). This function
- *   modifies the group's 'data' property for each group that is aggregated.
- *
- * @see drupal_group_css()
- * @see drupal_pre_render_styles()
- * @see system_element_info()
- */
-function drupal_aggregate_css(&$css_groups) {
-  // Only aggregate during normal site operation.
-  if (defined('MAINTENANCE_MODE')) {
-    $preprocess_css = FALSE;
-  }
-  else {
-    $config = config('system.performance');
-    $preprocess_css = $config->get('css.preprocess');
-  }
-
-  // For each group that needs aggregation, aggregate its items.
-  foreach ($css_groups as $key => $group) {
-    switch ($group['type']) {
-      // If a file group can be aggregated into a single file, do so, and set
-      // the group's data property to the file path of the aggregate file.
-      case 'file':
-        if ($group['preprocess'] && $preprocess_css) {
-          $css_groups[$key]['data'] = drupal_build_css_cache($group['items']);
-        }
-        break;
-      // Aggregate all inline CSS content into the group's data property.
-      case 'inline':
-        $css_groups[$key]['data'] = '';
-        foreach ($group['items'] as $item) {
-          $css_groups[$key]['data'] .= drupal_load_stylesheet_content($item['data'], $item['preprocess']);
-        }
-        break;
-    }
-  }
-}
-
-/**
  * Pre-render callback: Adds the elements needed for CSS tags to be rendered.
  *
  * For production websites, LINK tags are preferable to STYLE tags with @import
@@ -1997,11 +1843,6 @@ function drupal_aggregate_css(&$css_groups) {
  *   A render array containing:
  *   - '#items': The CSS items as returned by drupal_add_css() and altered by
  *     drupal_get_css().
- *   - '#group_callback': A function to call to group #items to enable the use
- *     of fewer tags by aggregating files and/or using multiple @import
- *     statements within a single tag.
- *   - '#aggregate_callback': A function to call to aggregate the items within
- *     the groups arranged by the #group_callback function.
  *
  * @return
  *   A render array that will render to a string of XHTML CSS tags.
@@ -2009,393 +1850,13 @@ function drupal_aggregate_css(&$css_groups) {
  * @see drupal_get_css()
  */
 function drupal_pre_render_styles($elements) {
-  // Group and aggregate the items.
-  if (isset($elements['#group_callback'])) {
-    $elements['#groups'] = $elements['#group_callback']($elements['#items']);
+  $css_assets = $elements['#items'];
+
+  // Aggregate the CSS if necessary, but only during normal site operation.
+  if (!defined('MAINTENANCE_MODE') && config('system.performance')->get('css.preprocess')) {
+    $css_assets = \Drupal::service('asset.css.collection_optimizer')->optimize($css_assets);
   }
-  if (isset($elements['#aggregate_callback'])) {
-    $elements['#aggregate_callback']($elements['#groups']);
-  }
-
-  // A dummy query-string is added to filenames, to gain control over
-  // browser-caching. The string changes on every update or full cache
-  // flush, forcing browsers to load a new copy of the files, as the
-  // URL changed.
-  $query_string = variable_get('css_js_query_string', '0');
-
-  // For inline CSS to validate as XHTML, all CSS containing XHTML needs to be
-  // wrapped in CDATA. To make that backwards compatible with HTML 4, we need to
-  // comment out the CDATA-tag.
-  $embed_prefix = "\n/* <![CDATA[ */\n";
-  $embed_suffix = "\n/* ]]> */\n";
-
-  // Defaults for LINK and STYLE elements.
-  $link_element_defaults = array(
-    '#type' => 'html_tag',
-    '#tag' => 'link',
-    '#attributes' => array(
-      'rel' => 'stylesheet',
-    ),
-  );
-  $style_element_defaults = array(
-    '#type' => 'html_tag',
-    '#tag' => 'style',
-  );
-
-  // Loop through each group.
-  foreach ($elements['#groups'] as $group) {
-    switch ($group['type']) {
-      // For file items, there are three possibilites.
-      // - The group has been aggregated: in this case, output a LINK tag for
-      //   the aggregate file.
-      // - The group can be aggregated but has not been (most likely because
-      //   the site administrator disabled the site-wide setting): in this case,
-      //   output as few STYLE tags for the group as possible, using @import
-      //   statement for each file in the group. This enables us to stay within
-      //   IE's limit of 31 total CSS inclusion tags.
-      // - The group contains items not eligible for aggregation (their
-      //   'preprocess' flag has been set to FALSE): in this case, output a LINK
-      //   tag for each file.
-      case 'file':
-        // The group has been aggregated into a single file: output a LINK tag
-        // for the aggregate file.
-        if (isset($group['data'])) {
-          $element = $link_element_defaults;
-          $element['#attributes']['href'] = file_create_url($group['data']);
-          $element['#attributes']['media'] = $group['media'];
-          $element['#browsers'] = $group['browsers'];
-          $elements[] = $element;
-        }
-        // The group can be aggregated, but hasn't been: combine multiple items
-        // into as few STYLE tags as possible.
-        elseif ($group['preprocess']) {
-          $import = array();
-          foreach ($group['items'] as $item) {
-            // The dummy query string needs to be added to the URL to control
-            // browser-caching. IE7 does not support a media type on the
-            // @import statement, so we instead specify the media for the
-            // group on the STYLE tag.
-            $import[] = '@import url("' . check_plain(file_create_url($item['data']) . '?' . $query_string) . '");';
-          }
-          // In addition to IE's limit of 31 total CSS inclusion tags, it also
-          // has a limit of 31 @import statements per STYLE tag.
-          while (!empty($import)) {
-            $import_batch = array_slice($import, 0, 31);
-            $import = array_slice($import, 31);
-            $element = $style_element_defaults;
-            // This simplifies the JavaScript regex, allowing each line
-            // (separated by \n) to be treated as a completely different string.
-            // This means that we can use ^ and $ on one line at a time, and not
-            // worry about style tags since they'll never match the regex.
-            $element['#value'] = "\n" . implode("\n", $import_batch) . "\n";
-            $element['#attributes']['media'] = $group['media'];
-            $element['#browsers'] = $group['browsers'];
-            $elements[] = $element;
-          }
-        }
-        // The group contains items ineligible for aggregation: output a LINK
-        // tag for each file.
-        else {
-          foreach ($group['items'] as $item) {
-            $element = $link_element_defaults;
-            // The dummy query string needs to be added to the URL to control
-            // browser-caching.
-            $query_string_separator = (strpos($item['data'], '?') !== FALSE) ? '&' : '?';
-            $element['#attributes']['href'] = file_create_url($item['data']) . $query_string_separator . $query_string;
-            $element['#attributes']['media'] = $item['media'];
-            $element['#browsers'] = $group['browsers'];
-            $elements[] = $element;
-          }
-        }
-        break;
-      // For inline content, the 'data' property contains the CSS content. If
-      // the group's 'data' property is set, then output it in a single STYLE
-      // tag. Otherwise, output a separate STYLE tag for each item.
-      case 'inline':
-        if (isset($group['data'])) {
-          $element = $style_element_defaults;
-          $element['#value'] = $group['data'];
-          $element['#value_prefix'] = $embed_prefix;
-          $element['#value_suffix'] = $embed_suffix;
-          $element['#attributes']['media'] = $group['media'];
-          $element['#browsers'] = $group['browsers'];
-          $elements[] = $element;
-        }
-        else {
-          foreach ($group['items'] as $item) {
-            $element = $style_element_defaults;
-            $element['#value'] = $item['data'];
-            $element['#value_prefix'] = $embed_prefix;
-            $element['#value_suffix'] = $embed_suffix;
-            $element['#attributes']['media'] = $item['media'];
-            $element['#browsers'] = $group['browsers'];
-            $elements[] = $element;
-          }
-        }
-        break;
-      // Output a LINK tag for each external item. The item's 'data' property
-      // contains the full URL.
-      case 'external':
-        foreach ($group['items'] as $item) {
-          $element = $link_element_defaults;
-          $element['#attributes']['href'] = $item['data'];
-          $element['#attributes']['media'] = $item['media'];
-          $element['#browsers'] = $group['browsers'];
-          $elements[] = $element;
-        }
-        break;
-    }
-  }
-
-  return $elements;
-}
-
-/**
- * Aggregates and optimizes CSS files into a cache file in the files directory.
- *
- * The file name for the CSS cache file is generated from the hash of the
- * aggregated contents of the files in $css. This forces proxies and browsers
- * to download new CSS when the CSS changes.
- *
- * The cache file name is retrieved on a page load via a lookup variable that
- * contains an associative array. The array key is the hash of the file names
- * in $css while the value is the cache file name. The cache file is generated
- * in two cases. First, if there is no file name value for the key, which will
- * happen if a new file name has been added to $css or after the lookup
- * variable is emptied to force a rebuild of the cache. Second, the cache file
- * is generated if it is missing on disk. Old cache files are not deleted
- * immediately when the lookup variable is emptied, but are deleted after a set
- * period by drupal_delete_file_if_stale(). This ensures that files referenced
- * by a cached page will still be available.
- *
- * @param $css
- *   An array of CSS files to aggregate and compress into one file.
- *
- * @return
- *   The URI of the CSS cache file, or FALSE if the file could not be saved.
- */
-function drupal_build_css_cache($css) {
-  $data = '';
-  $uri = '';
-  $map = Drupal::state()->get('drupal_css_cache_files') ?: array();
-  // Create a new array so that only the file names are used to create the hash.
-  // This prevents new aggregates from being created unnecessarily.
-  $css_data = array();
-  foreach ($css as $css_file) {
-    $css_data[] = $css_file['data'];
-  }
-  $key = hash('sha256', serialize($css_data));
-  if (isset($map[$key])) {
-    $uri = $map[$key];
-  }
-
-  if (empty($uri) || !file_exists($uri)) {
-    // Build aggregate CSS file.
-    foreach ($css as $stylesheet) {
-      // Only 'file' stylesheets can be aggregated.
-      if ($stylesheet['type'] == 'file') {
-        $contents = drupal_load_stylesheet($stylesheet['data'], TRUE);
-
-        // Get the parent directory of this file, relative to the Drupal root.
-        $css_base_url = substr($stylesheet['data'], 0, strrpos($stylesheet['data'], '/'));
-        _drupal_build_css_path(NULL, $css_base_url . '/');
-        // Anchor all paths in the CSS with its base URL, ignoring external and absolute paths.
-        $data .= preg_replace_callback('/url\(\s*[\'"]?(?![a-z]+:|\/+)([^\'")]+)[\'"]?\s*\)/i', '_drupal_build_css_path', $contents);
-      }
-    }
-
-    // Per the W3C specification at http://www.w3.org/TR/REC-CSS2/cascade.html#at-import,
-    // @import rules must proceed any other style, so we move those to the top.
-    $regexp = '/@import[^;]+;/i';
-    preg_match_all($regexp, $data, $matches);
-    $data = preg_replace($regexp, '', $data);
-    $data = implode('', $matches[0]) . $data;
-
-    // Prefix filename to prevent blocking by firewalls which reject files
-    // starting with "ad*".
-    $filename = 'css_' . Crypt::hashBase64($data) . '.css';
-    // Create the css/ within the files folder.
-    $csspath = 'public://css';
-    $uri = $csspath . '/' . $filename;
-    // Create the CSS file.
-    file_prepare_directory($csspath, FILE_CREATE_DIRECTORY);
-    if (!file_exists($uri) && !file_unmanaged_save_data($data, $uri, FILE_EXISTS_REPLACE)) {
-      return FALSE;
-    }
-    // If CSS gzip compression is enabled and the zlib extension is available
-    // then create a gzipped version of this file. This file is served
-    // conditionally to browsers that accept gzip using .htaccess rules.
-    // It's possible that the rewrite rules in .htaccess aren't working on this
-    // server, but there's no harm (other than the time spent generating the
-    // file) in generating the file anyway. Sites on servers where rewrite rules
-    // aren't working can set css.gzip to FALSE in order to skip
-    // generating a file that won't be used.
-    if (config('system.performance')->get('css.gzip') && extension_loaded('zlib')) {
-      if (!file_exists($uri . '.gz') && !file_unmanaged_save_data(gzencode($data, 9, FORCE_GZIP), $uri . '.gz', FILE_EXISTS_REPLACE)) {
-        return FALSE;
-      }
-    }
-    // Save the updated map.
-    $map[$key] = $uri;
-    Drupal::state()->set('drupal_css_cache_files', $map);
-  }
-  return $uri;
-}
-
-/**
- * Prefixes all paths within a CSS file for drupal_build_css_cache().
- */
-function _drupal_build_css_path($matches, $base = NULL) {
-  $_base = &drupal_static(__FUNCTION__);
-  // Store base path for preg_replace_callback.
-  if (isset($base)) {
-    $_base = $base;
-  }
-
-  // Prefix with base and remove '../' segments where possible.
-  $path = $_base . $matches[1];
-  $last = '';
-  while ($path != $last) {
-    $last = $path;
-    $path = preg_replace('`(^|/)(?!\.\./)([^/]+)/\.\./`', '$1', $path);
-  }
-  return 'url(' . file_create_url($path) . ')';
-}
-
-/**
- * Loads the stylesheet and resolves all @import commands.
- *
- * Loads a stylesheet and replaces @import commands with the contents of the
- * imported file. Use this instead of file_get_contents when processing
- * stylesheets.
- *
- * The returned contents are compressed removing white space and comments only
- * when CSS aggregation is enabled. This optimization will not apply for
- * color.module enabled themes with CSS aggregation turned off.
- *
- * @param $file
- *   Name of the stylesheet to be processed.
- * @param $optimize
- *   Defines if CSS contents should be compressed or not.
- * @param $reset_basepath
- *   Used internally to facilitate recursive resolution of @import commands.
- *
- * @return
- *   Contents of the stylesheet, including any resolved @import commands.
- */
-function drupal_load_stylesheet($file, $optimize = NULL, $reset_basepath = TRUE) {
-  // These statics are not cache variables, so we don't use drupal_static().
-  static $_optimize, $basepath;
-  if ($reset_basepath) {
-    $basepath = '';
-  }
-  // Store the value of $optimize for preg_replace_callback with nested
-  // @import loops.
-  if (isset($optimize)) {
-    $_optimize = $optimize;
-  }
-
-  // Stylesheets are relative one to each other. Start by adding a base path
-  // prefix provided by the parent stylesheet (if necessary).
-  if ($basepath && !file_uri_scheme($file)) {
-    $file = $basepath . '/' . $file;
-  }
-  $basepath = dirname($file);
-
-  // Load the CSS stylesheet. We suppress errors because themes may specify
-  // stylesheets in their .info.yml file that don't exist in the theme's path,
-  // but are merely there to disable certain module CSS files.
-  if ($contents = @file_get_contents($file)) {
-    // Return the processed stylesheet.
-    return drupal_load_stylesheet_content($contents, $_optimize);
-  }
-
-  return '';
-}
-
-/**
- * Processes the contents of a stylesheet for aggregation.
- *
- * @param $contents
- *   The contents of the stylesheet.
- * @param $optimize
- *   (optional) Boolean whether CSS contents should be minified. Defaults to
- *   FALSE.
- *
- * @return
- *   Contents of the stylesheet including the imported stylesheets.
- */
-function drupal_load_stylesheet_content($contents, $optimize = FALSE) {
-  // Remove multiple charset declarations for standards compliance (and fixing Safari problems).
-  $contents = preg_replace('/^@charset\s+[\'"](\S*)\b[\'"];/i', '', $contents);
-
-  if ($optimize) {
-    // Perform some safe CSS optimizations.
-    // Regexp to match comment blocks.
-    $comment     = '/\*[^*]*\*+(?:[^/*][^*]*\*+)*/';
-    // Regexp to match double quoted strings.
-    $double_quot = '"[^"\\\\]*(?:\\\\.[^"\\\\]*)*"';
-    // Regexp to match single quoted strings.
-    $single_quot = "'[^'\\\\]*(?:\\\\.[^'\\\\]*)*'";
-    // Strip all comment blocks, but keep double/single quoted strings.
-    $contents = preg_replace(
-      "<($double_quot|$single_quot)|$comment>Ss",
-      "$1",
-      $contents
-    );
-    // Remove certain whitespace.
-    // There are different conditions for removing leading and trailing
-    // whitespace.
-    // @see http://php.net/manual/regexp.reference.subpatterns.php
-    $contents = preg_replace('<
-      # Strip leading and trailing whitespace.
-        \s*([@{};,])\s*
-      # Strip only leading whitespace from:
-      # - Closing parenthesis: Retain "@media (bar) and foo".
-      | \s+([\)])
-      # Strip only trailing whitespace from:
-      # - Opening parenthesis: Retain "@media (bar) and foo".
-      # - Colon: Retain :pseudo-selectors.
-      | ([\(:])\s+
-    >xS',
-      // Only one of the three capturing groups will match, so its reference
-      // will contain the wanted value and the references for the
-      // two non-matching groups will be replaced with empty strings.
-      '$1$2$3',
-      $contents
-    );
-    // End the file with a new line.
-    $contents = trim($contents);
-    $contents .= "\n";
-  }
-
-  // Replaces @import commands with the actual stylesheet content.
-  // This happens recursively but omits external files.
-  $contents = preg_replace_callback('/@import\s*(?:url\(\s*)?[\'"]?(?![a-z]+:)([^\'"\()]+)[\'"]?\s*\)?\s*;/', '_drupal_load_stylesheet', $contents);
-  return $contents;
-}
-
-/**
- * Loads stylesheets recursively and returns contents with corrected paths.
- *
- * This function is used for recursive loading of stylesheets and
- * returns the stylesheet content with all url() paths corrected.
- */
-function _drupal_load_stylesheet($matches) {
-  $filename = $matches[1];
-  // Load the imported stylesheet and replace @import commands in there as well.
-  $file = drupal_load_stylesheet($filename, NULL, FALSE);
-
-  // Determine the file's directory.
-  $directory = dirname($filename);
-  // If the file is in the current directory, make sure '.' doesn't appear in
-  // the url() path.
-  $directory = $directory == '.' ? '' : $directory .'/';
-
-  // Alter all internal url() paths. Leave external paths alone. We don't need
-  // to normalize absolute paths here (i.e. remove folder/... segments) because
-  // that will be done later.
-  return preg_replace('/url\(\s*([\'"]?)(?![a-z]+:|\/+)/i', 'url(\1'. $directory, $file);
+  return \Drupal::service('asset.css.collection_renderer')->render($css_assets);
 }
 
 /**
@@ -3017,214 +2478,14 @@ function drupal_merge_js_settings($settings_items) {
  * @see drupal_get_js()
  */
 function drupal_pre_render_scripts($elements) {
-  // Group and aggregate the items.
-  if (isset($elements['#group_callback'])) {
-    $elements['#groups'] = $elements['#group_callback']($elements['#items']);
+  $js_assets = $elements['#items'];
+
+  // Aggregate the JavaScript if necessary, but only during normal site
+  // operation.
+  if (!defined('MAINTENANCE_MODE') && config('system.performance')->get('js.preprocess')) {
+    $js_assets = \Drupal::service('asset.js.collection_optimizer')->optimize($js_assets);
   }
-  if (isset($elements['#aggregate_callback'])) {
-    $elements['#aggregate_callback']($elements['#groups']);
-  }
-
-  // A dummy query-string is added to filenames, to gain control over
-  // browser-caching. The string changes on every update or full cache
-  // flush, forcing browsers to load a new copy of the files, as the
-  // URL changed. Files that should not be cached (see drupal_add_js())
-  // get REQUEST_TIME as query-string instead, to enforce reload on every
-  // page request.
-  $default_query_string = variable_get('css_js_query_string', '0');
-
-  // For inline JavaScript to validate as XHTML, all JavaScript containing
-  // XHTML needs to be wrapped in CDATA. To make that backwards compatible
-  // with HTML 4, we need to comment out the CDATA-tag.
-  $embed_prefix = "\n<!--//--><![CDATA[//><!--\n";
-  $embed_suffix = "\n//--><!]]>\n";
-
-  // Since JavaScript may look for arguments in the URL and act on them, some
-  // third-party code might require the use of a different query string.
-  $js_version_string = variable_get('drupal_js_version_query_string', 'v=');
-
-  // Defaults for each SCRIPT element.
-  $element_defaults = array(
-    '#type' => 'html_tag',
-    '#tag' => 'script',
-    '#value' => '',
-  );
-
-  // Loop through each group.
-  foreach ($elements['#groups'] as $group) {
-    // If a group of files has been aggregated into a single file,
-    // $group['data'] contains the URI of the aggregate file. Add a single
-    // script element for this file.
-    if ($group['type'] == 'file' && isset($group['data'])) {
-      $element = $element_defaults;
-      $element['#attributes']['src'] = file_create_url($group['data']);
-      $element['#browsers'] = $group['browsers'];
-      $elements[] = $element;
-    }
-    // For non-file types, and non-aggregated files, add a script element per
-    // item.
-    else {
-      foreach ($group['items'] as $item) {
-        // Element properties that do not depend on item type.
-        $element = $element_defaults;
-        $element['#browsers'] = $item['browsers'];
-
-        // Element properties that depend on item type.
-        switch ($item['type']) {
-          case 'setting':
-            $element['#value_prefix'] = $embed_prefix;
-            $element['#value'] = 'var drupalSettings = ' . drupal_json_encode(drupal_merge_js_settings($item['data'])) . ";";
-            $element['#value_suffix'] = $embed_suffix;
-            break;
-
-          case 'inline':
-            $element['#value_prefix'] = $embed_prefix;
-            $element['#value'] = $item['data'];
-            $element['#value_suffix'] = $embed_suffix;
-            break;
-
-          case 'file':
-            $query_string = empty($item['version']) ? $default_query_string : $js_version_string . $item['version'];
-            $query_string_separator = (strpos($item['data'], '?') !== FALSE) ? '&' : '?';
-            $element['#attributes']['src'] = file_create_url($item['data']) . $query_string_separator . ($item['cache'] ? $query_string : REQUEST_TIME);
-            break;
-
-          case 'external':
-            $element['#attributes']['src'] = $item['data'];
-            break;
-        }
-
-        // Attributes may only be set if this script is output independently.
-        if (!empty($element['#attributes']['src']) && !empty($item['attributes'])) {
-          $element['#attributes'] += $item['attributes'];
-        }
-
-        $elements[] = $element;
-      }
-    }
-  }
-
-  return $elements;
-}
-
-/**
- * Default callback to group JavaScript items.
- *
- * This function arranges the JavaScript items that are in the #items property
- * of the scripts element into groups. When aggregation is enabled, files within
- * a group are aggregated into a single file, significantly improving page
- * loading performance by minimizing network traffic overhead.
- *
- * This function puts multiple items into the same group if they are groupable
- * and if they are for the same browsers. Items of the 'file' type are groupable
- * if their 'preprocess' flag is TRUE. Items of the 'inline', 'settings', or
- * 'external' type are not groupable.
- *
- * This function also ensures that the process of grouping items does not change
- * their relative order. This requirement may result in multiple groups for the
- * same type and browsers, if needed to accommodate other items in
- * between.
- *
- * @param $javascript
- *   An array of JavaScript items, as returned by drupal_add_js(), but after
- *   alteration performed by drupal_get_js().
- *
- * @return
- *   An array of JavaScript groups. Each group contains the same keys (e.g.,
- *   'data', etc.) as a JavaScript item from the $javascript parameter, with the
- *   value of each key applying to the group as a whole. Each group also
- *   contains an 'items' key, which is the subset of items from $javascript that
- *   are in the group.
- *
- * @see drupal_pre_render_scripts()
- */
-function drupal_group_js($javascript) {
-  $groups = array();
-  // If a group can contain multiple items, we track the information that must
-  // be the same for each item in the group, so that when we iterate the next
-  // item, we can determine if it can be put into the current group, or if a
-  // new group needs to be made for it.
-  $current_group_keys = NULL;
-  $index = -1;
-  foreach ($javascript as $item) {
-    // The browsers for which the JavaScript item needs to be loaded is part of
-    // the information that determines when a new group is needed, but the order
-    // of keys in the array doesn't matter, and we don't want a new group if all
-    // that's different is that order.
-    ksort($item['browsers']);
-
-    switch ($item['type']) {
-      case 'file':
-        // Group file items if their 'preprocess' flag is TRUE.
-        // Help ensure maximum reuse of aggregate files by only grouping
-        // together items that share the same 'group' value and 'every_page'
-        // flag. See drupal_add_js() for details about that.
-        $group_keys = $item['preprocess'] ? array($item['type'], $item['group'], $item['every_page'], $item['browsers']) : FALSE;
-        break;
-
-      case 'external':
-      case 'setting':
-      case 'inline':
-        // Do not group external, settings, and inline items.
-        $group_keys = FALSE;
-        break;
-    }
-
-    // If the group keys don't match the most recent group we're working with,
-    // then a new group must be made.
-    if ($group_keys !== $current_group_keys) {
-      $index++;
-      // Initialize the new group with the same properties as the first item
-      // being placed into it. The item's 'data' and 'weight' properties are
-      // unique to the item and should not be carried over to the group.
-      $groups[$index] = $item;
-      unset($groups[$index]['data'], $groups[$index]['weight']);
-      $groups[$index]['items'] = array();
-      $current_group_keys = $group_keys ? $group_keys : NULL;
-    }
-
-    // Add the item to the current group.
-    $groups[$index]['items'][] = $item;
-  }
-
-  return $groups;
-}
-
-/**
- * Default callback to aggregate JavaScript files.
- *
- * Having the browser load fewer JavaScript files results in much faster page
- * loads than when it loads many small files. This function aggregates files
- * within the same group into a single file unless the site-wide setting to do
- * so is disabled (commonly the case during site development). To optimize
- * download, it also compresses the aggregate files by removing comments,
- * whitespace, and other unnecessary content.
- *
- * @param $js_groups
- *   An array of JavaScript groups as returned by drupal_group_js(). For each
- *   group that is aggregated, this function sets the value of the group's
- *   'data' key to the URI of the aggregate file.
- *
- * @see drupal_group_js()
- * @see drupal_pre_render_scripts()
- */
-function drupal_aggregate_js(&$js_groups) {
-  // Only aggregate during normal site operation.
-  if (defined('MAINTENANCE_MODE')) {
-    $preprocess_js = FALSE;
-  }
-  else {
-    $config = config('system.performance');
-    $preprocess_js = $config->get('js.preprocess');
-  }
-
-  if ($preprocess_js) {
-    foreach ($js_groups as $key => $group) {
-      if ($group['type'] == 'file' && $group['preprocess']) {
-        $js_groups[$key]['data'] = drupal_build_js_cache($group['items']);
-      }
-    }
-  }
+  return \Drupal::service('asset.js.collection_renderer')->render($js_assets);
 }
 
 /**
@@ -3727,83 +2988,6 @@ function drupal_add_tabledrag($table_id, $action, $relationship, $group, $subgro
 }
 
 /**
- * Aggregates JavaScript files into a cache file in the files directory.
- *
- * The file name for the JavaScript cache file is generated from the hash of
- * the aggregated contents of the files in $files. This forces proxies and
- * browsers to download new JavaScript when the JavaScript changes.
- *
- * The cache file name is retrieved on a page load via a lookup variable that
- * contains an associative array. The array key is the hash of the names in
- * $files while the value is the cache file name. The cache file is generated
- * in two cases. First, if there is no file name value for the key, which will
- * happen if a new file name has been added to $files or after the lookup
- * variable is emptied to force a rebuild of the cache. Second, the cache file
- * is generated if it is missing on disk. Old cache files are not deleted
- * immediately when the lookup variable is emptied, but are deleted after a set
- * period by drupal_delete_file_if_stale(). This ensures that files referenced
- * by a cached page will still be available.
- *
- * @param $files
- *   An array of JavaScript files to aggregate and compress into one file.
- *
- * @return
- *   The URI of the cache file, or FALSE if the file could not be saved.
- */
-function drupal_build_js_cache($files) {
-  $contents = '';
-  $uri = '';
-  $map = Drupal::state()->get('system.js_cache_files') ?: array();
-  // Create a new array so that only the file names are used to create the hash.
-  // This prevents new aggregates from being created unnecessarily.
-  $js_data = array();
-  foreach ($files as $file) {
-    $js_data[] = $file['data'];
-  }
-  $key = hash('sha256', serialize($js_data));
-  if (isset($map[$key])) {
-    $uri = $map[$key];
-  }
-
-  if (empty($uri) || !file_exists($uri)) {
-    // Build aggregate JS file.
-    foreach ($files as $info) {
-      if ($info['preprocess']) {
-        // Append a ';' and a newline after each JS file to prevent them from running together.
-        $contents .= file_get_contents($info['data']) . ";\n";
-      }
-    }
-    // Prefix filename to prevent blocking by firewalls which reject files
-    // starting with "ad*".
-    $filename = 'js_' . Crypt::hashBase64($contents) . '.js';
-    // Create the js/ within the files folder.
-    $jspath = 'public://js';
-    $uri = $jspath . '/' . $filename;
-    // Create the JS file.
-    file_prepare_directory($jspath, FILE_CREATE_DIRECTORY);
-    if (!file_exists($uri) && !file_unmanaged_save_data($contents, $uri, FILE_EXISTS_REPLACE)) {
-      return FALSE;
-    }
-    // If JS gzip compression is enabled and the zlib extension is available
-    // then create a gzipped version of this file. This file is served
-    // conditionally to browsers that accept gzip using .htaccess rules.
-    // It's possible that the rewrite rules in .htaccess aren't working on this
-    // server, but there's no harm (other than the time spent generating the
-    // file) in generating the file anyway. Sites on servers where rewrite rules
-    // aren't working can set js.gzip to FALSE in order to skip
-    // generating a file that won't be used.
-    if (config('system.performance')->get('js.gzip') && extension_loaded('zlib')) {
-      if (!file_exists($uri . '.gz') && !file_unmanaged_save_data(gzencode($contents, 9, FORCE_GZIP), $uri . '.gz', FILE_EXISTS_REPLACE)) {
-        return FALSE;
-      }
-    }
-    $map[$key] = $uri;
-    Drupal::state()->set('system.js_cache_files', $map);
-  }
-  return $uri;
-}
-
-/**
  * Deletes old cached JavaScript files and variables.
  */
 function drupal_clear_js_cache() {
@@ -3885,7 +3069,7 @@ function drupal_get_token($value = '') {
  */
 function drupal_valid_token($token, $value = '', $skip_anonymous = FALSE) {
   global $user;
-  return (($skip_anonymous && $user->uid == 0) || ($token == drupal_get_token($value)));
+  return (($skip_anonymous && $user->id() == 0) || ($token == drupal_get_token($value)));
 }
 
 /**
@@ -3909,10 +3093,6 @@ function _drupal_bootstrap_code() {
 
   // Load all enabled modules
   Drupal::moduleHandler()->loadAll();
-
-  // Set our bridge extension manager to Zend Feed.
-  Reader::setExtensionManager(Drupal::service('feed.bridge.reader'));
-  Writer::setExtensionManager(Drupal::service('feed.bridge.writer'));
 
   // Make sure all stream wrappers are registered.
   file_get_stream_wrappers();
@@ -4370,7 +3550,7 @@ function drupal_pre_render_link($element) {
  * For example, adding this code to node.html.twig will result in the comment
  * links being rendered as a single list:
  * @code
- * print render($content['links']['comment']);
+ * {{ content.links.comment }}
  * @endcode
  *
  * (where $node->content has been transformed into $content before handing
@@ -4380,7 +3560,7 @@ function drupal_pre_render_link($element) {
  * allows the following code to be used to render all remaining links into a
  * single list, regardless of their group:
  * @code
- * print render($content['links']);
+ * {{ content.links }}
  * @endcode
  *
  * In the above example, this will result in the statistics and translation
@@ -4478,79 +3658,100 @@ function drupal_render_page($page) {
 /**
  * Renders HTML given a structured array tree.
  *
- * Recursively iterates over each of the array elements, generating HTML code.
+ * Renderable arrays have two kinds of key/value pairs: properties and children.
+ * Properties have keys starting with '#' and their values influence how the
+ * array will be rendered. Children are all elements whose keys do not start
+ * with a '#'. Their values should be renderable arrays themselves, which will
+ * be rendered during the rendering of the parent array. The markup provided by
+ * the children is typically inserted into the markup generated by the parent
+ * array.
  *
- * Renderable arrays have two kinds of key/value pairs: properties and
- * children. Properties have keys starting with '#' and their values influence
- * how the array will be rendered. Children are all elements whose keys do not
- * start with a '#'. Their values should be renderable arrays themselves,
- * which will be rendered during the rendering of the parent array. The markup
- * provided by the children is typically inserted into the markup generated by
- * the parent array.
- *
- * HTML generation for a renderable array, and the treatment of any children,
- * is controlled by two properties containing theme functions, #theme and
- * #theme_wrappers.
- *
- * #theme is the theme function called first. If it is set and the element has
- * any children, it is the responsibility of the theme function to render
- * these children. For elements that are not allowed to have any children,
- * e.g. buttons or textfields, the theme function can be used to render the
- * element itself. If #theme is not present and the element has children, each
- * child is itself rendered by a call to drupal_render(), and the results are
- * concatenated.
- *
- * The #theme_wrappers property contains an array of theme functions which will
- * be called, in order, after #theme has run. These can be used to add further
- * markup around the rendered children; e.g., details add the required markup
- * for a details element around their rendered child elements. All wrapper theme
- * functions have to include the element's #children property in their output,
- * as it contains the output of the previous theme functions and the rendered
- * children.
- *
- * For example, for the form element type, by default only the #theme_wrappers
- * property is set, which adds the form markup around the rendered child
- * elements of the form. This allows you to set the #theme property on a
- * specific form to a custom theme function, giving you complete control over
- * the placement of the form's children while not at all having to deal with
- * the form markup itself.
- *
- * drupal_render() can optionally cache the rendered output of elements to
- * improve performance. To use drupal_render() caching, set the element's #cache
- * property to an associative array with one or several of the following keys:
- * - 'keys': An array of one or more keys that identify the element. If 'keys'
- *   is set, the cache ID is created automatically from these keys. See
- *   drupal_render_cid_create().
- * - 'granularity' (optional): Define the cache granularity using binary
- *   combinations of the cache granularity constants, e.g.
- *   DRUPAL_CACHE_PER_USER to cache for each user separately or
- *   DRUPAL_CACHE_PER_PAGE | DRUPAL_CACHE_PER_ROLE to cache separately for each
- *   page and role. If not specified the element is cached globally for each
- *   theme and language.
- * - 'cid': Specify the cache ID directly. Either 'keys' or 'cid' is required.
- *   If 'cid' is set, 'keys' and 'granularity' are ignored. Use only if you
- *   have special requirements.
- * - 'expire': Set to one of the cache lifetime constants.
- * - 'bin': Specify a cache bin to cache the element in. Defaults to 'cache'.
- *
- * This function is usually called from within another function, like
- * drupal_get_form() or a theme function. Elements are sorted internally
- * using uasort(). Since this is expensive, when passing already sorted
- * elements to drupal_render(), for example from a database query, set
- * $elements['#sorted'] = TRUE to avoid sorting them a second time.
- *
- * drupal_render() flags each element with a '#printed' status to indicate that
- * the element has been rendered, which allows individual elements of a given
- * array to be rendered independently and prevents them from being rendered
- * more than once on subsequent calls to drupal_render() (e.g., as part of a
- * larger array). If the same array or array element is passed more than once
- * to drupal_render(), it simply returns an empty string.
+ * The process of rendering an element is recursive unless the element defines
+ * an implemented theme hook in #theme. During each call to drupal_render(), the
+ * outermost renderable array (also known as an "element") is processed using
+ * the following steps:
+ *   - If this element has already been printed (#printed = TRUE) or the user
+ *     does not have access to it (#access = FALSE), then an empty string is
+ *     returned.
+ *   - If this element has #cache defined then the cached markup for this
+ *     element will be returned if it exists in drupal_render()'s cache. To use
+ *     drupal_render() caching, set the element's #cache property to an
+ *     associative array with one or several of the following keys:
+ *     - 'keys': An array of one or more keys that identify the element. If
+ *       'keys' is set, the cache ID is created automatically from these keys.
+ *       See drupal_render_cid_create().
+ *     - 'granularity' (optional): Define the cache granularity using binary
+ *       combinations of the cache granularity constants, e.g.
+ *       DRUPAL_CACHE_PER_USER to cache for each user separately or
+ *       DRUPAL_CACHE_PER_PAGE | DRUPAL_CACHE_PER_ROLE to cache separately for
+ *       each page and role. If not specified the element is cached globally for
+ *       each theme and language.
+ *     - 'cid': Specify the cache ID directly. Either 'keys' or 'cid' is
+ *       required. If 'cid' is set, 'keys' and 'granularity' are ignored. Use
+ *       only if you have special requirements.
+ *     - 'expire': Set to one of the cache lifetime constants.
+ *     - 'bin': Specify a cache bin to cache the element in. Default is 'cache'.
+ *   - If this element has #type defined and the default attributes for this
+ *     element have not already been merged in (#defaults_loaded = TRUE) then
+ *     the defaults for this type of element, defined in hook_element_info(),
+ *     are merged into the array. #defaults_loaded is set by functions that
+ *     process render arrays and call element_info() before passing the array to
+ *     drupal_render(), such as form_builder() in the Form API.
+ *   - If this element has an array of #pre_render functions defined, they are
+ *     called sequentially to modify the element before rendering. After all the
+ *     #pre_render functions have been called, #printed is checked a second time
+ *     in case a #pre_render function flags the element as printed.
+ *   - The child elements of this element are sorted by weight using uasort() in
+ *     element_children(). Since this is expensive, when passing already sorted
+ *     elements to drupal_render(), for example from a database query, set
+ *     $elements['#sorted'] = TRUE to avoid sorting them a second time.
+ *   - The main render phase to produce #children for this element takes place:
+ *     - If this element has #theme defined and #theme is an implemented theme
+ *       hook/suggestion then theme() is called and must render both the element
+ *       and its children. If #render_children is set, theme() will not be
+ *       called. #render_children is usually only set internally by theme() so
+ *       that we can avoid the situation where drupal_render() called from
+ *       within a theme preprocess function creates an infinite loop.
+ *     - If this element does not have a defined #theme, or the defined #theme
+ *       hook is not implemented, or #render_children is set, then
+ *       drupal_render() is called recursively on each of the child elements of
+ *       this element, and the result of each is concatenated onto #children.
+ *       This is skipped if #children is not empty at this point.
+ *     - Once #children has been rendered for this element, if #theme is not
+ *       implemented and #markup is set for this element, #markup will be
+ *       prepended to #children.
+ *   - If this element has #states defined then JavaScript state information is
+ *     added to this element's #attached attribute by drupal_process_states().
+ *   - If this element has #attached defined then any required libraries,
+ *     JavaScript, CSS, or other custom data are added to the current page by
+ *     drupal_process_attached().
+ *   - If this element has an array of #theme_wrappers defined and
+ *     #render_children is not set, #children is then re-rendered by passing the
+ *     element in its current state to theme() successively for each item in
+ *     #theme_wrappers.
+ *   - If this element has an array of #post_render functions defined, they are
+ *     called sequentially to modify the rendered #children. Unlike #pre_render
+ *     functions, #post_render functions are passed both the rendered #children
+ *     attribute as a string and the element itself.
+ *   - If this element has #prefix and/or #suffix defined, they are concatenated
+ *     to #children.
+ *   - If this element has #cache defined, the rendered output of this element
+ *     is saved to drupal_render()'s internal cache.
+ *   - #printed is set to TRUE for this element to ensure that it is only
+ *     rendered once.
+ *   - The final value of #children for this element is returned as the rendered
+ *     output.
  *
  * @param array $elements
  *   The structured array describing the data to be rendered.
  *
  * @return string
  *   The rendered HTML.
+ *
+ * @see element_info()
+ * @see theme()
+ * @see drupal_process_states()
+ * @see drupal_process_attached()
  */
 function drupal_render(&$elements) {
   // Early-return nothing if user does not have access.
@@ -4980,10 +4181,10 @@ function drupal_render_cid_parts($granularity = NULL) {
     // resource drag for sites with many users, so when a module is being
     // equivocal, we favor the less expensive 'PER_ROLE' pattern.
     if ($granularity & DRUPAL_CACHE_PER_ROLE) {
-      $cid_parts[] = 'r.' . implode(',', $user->roles);
+      $cid_parts[] = 'r.' . implode(',', $user->getRoles());
     }
     elseif ($granularity & DRUPAL_CACHE_PER_USER) {
-      $cid_parts[] = "u.$user->uid";
+      $cid_parts[] = 'u.' . $user->id();
     }
 
     if ($granularity & DRUPAL_CACHE_PER_PAGE) {

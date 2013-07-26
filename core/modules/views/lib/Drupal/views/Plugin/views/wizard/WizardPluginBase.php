@@ -694,7 +694,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
   protected function addDisplays(View $view, $display_options, $form, $form_state) {
     // Initialize and store the view executable to get the display plugin
     // instances.
-    $executable = $view->get('executable');
+    $executable = $view->getExecutable();
 
     // Display: Master
     $default_display = $view->newDisplay('default', 'Master', 'default');
@@ -763,20 +763,27 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
     // choose the first field with a field handler.
     $data = Views::viewsData()->get($this->base_table);
     if (isset($data['table']['base']['defaults']['field'])) {
-      $field = $data['table']['base']['defaults']['field'];
+      $default_field = $data['table']['base']['defaults']['field'];
     }
     else {
-      foreach ($data as $field => $field_data) {
+      foreach ($data as $default_field => $field_data) {
         if (isset($field_data['field']['id'])) {
           break;
         }
       }
     }
-    $display_options['fields'][$field] = array(
+    $display_options['fields'][$default_field] = array(
       'table' => $this->base_table,
-      'field' => $field,
-      'id' => $field,
+      'field' => $default_field,
+      'id' => $default_field,
     );
+
+    // Load the plugin ID and module.
+    $base_field = $data['table']['base']['field'];
+    $display_options['fields'][$base_field]['plugin_id'] = $data[$base_field]['field']['id'];
+    if ($definition = Views::pluginManager('field')->getDefinition($display_options['fields'][$base_field]['plugin_id'])) {
+      $display_options['fields'][$base_field]['provider'] = isset($definition['provider']) ? $definition['provider'] : 'views';
+    }
 
     return $display_options;
   }
@@ -1151,7 +1158,7 @@ abstract class WizardPluginBase extends PluginBase implements WizardInterface {
    */
   public function validateView(array $form, array &$form_state) {
     $view = $this->instantiateView($form, $form_state);
-    $errors = $view->get('executable')->validate();
+    $errors = $view->getExecutable()->validate();
 
     if (empty($errors)) {
       $this->setValidatedView($form, $form_state, $view);

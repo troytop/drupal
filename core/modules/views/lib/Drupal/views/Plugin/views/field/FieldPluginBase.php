@@ -9,6 +9,7 @@ namespace Drupal\views\Plugin\views\field;
 
 use Drupal\views\Plugin\views\HandlerBase;
 use Drupal\views\Plugin\views\display\DisplayPluginBase;
+use Drupal\views\ResultRow;
 use Drupal\views\ViewExecutable;
 
 /**
@@ -361,13 +362,13 @@ abstract class FieldPluginBase extends HandlerBase {
   /**
    * Gets the entity matching the current row and relationship.
    *
-   * @param \stdClass $values
+   * @param \Drupal\views\ResultRow $values
    *   An object containing all retrieved values.
    *
    * @return \Drupal\Core\Entity\EntityInterface
    *   Returns the entity matching the values.
    */
-  public function getEntity(\stdClass $values) {
+  public function getEntity(ResultRow $values) {
     $relationship_id = $this->options['relationship'];
     if ($relationship_id == 'none') {
       return $values->_entity;
@@ -859,11 +860,10 @@ abstract class FieldPluginBase extends HandlerBase {
       $this->documentSelfTokens($options[t('Fields')]);
 
       // Default text.
-      $output = t('<p>You must add some additional fields to this display before using this field. These fields may be marked as <em>Exclude from display</em> if you prefer. Note that due to rendering order, you cannot use fields that come after this field; if you need a field not listed here, rearrange your fields.</p>');
+      $output = '<p>' . t('You must add some additional fields to this display before using this field. These fields may be marked as <em>Exclude from display</em> if you prefer. Note that due to rendering order, you cannot use fields that come after this field; if you need a field not listed here, rearrange your fields.') . '</p>';
       // We have some options, so make a list.
       if (!empty($options)) {
-        $output = t('<p>The following tokens are available for this field. Note that due to rendering order, you cannot use fields that come after this field; if you need a field not listed here, rearrange your fields.
-If you would like to have the characters \'[\' and \']\' use the html entity codes \'%5B\' or  \'%5D\' or they will get replaced with empty space.</p>');
+        $output = '<p>' . t("The following tokens are available for this field. Note that due to rendering order, you cannot use fields that come after this field; if you need a field not listed here, rearrange your fields. If you would like to have the characters '[' and ']' use the html entity codes '%5B' or '%5D' or they will get replaced with empty space.") . '</p>';
         foreach (array_keys($options) as $type) {
           if (!empty($options[$type])) {
             $items = array();
@@ -1098,7 +1098,7 @@ If you would like to have the characters \'[\' and \']\' use the html entity cod
    * @param $values
    *   The values retrieved from the database.
    */
-  function render($values) {
+  public function render($values) {
     $value = $this->getValue($values);
     return $this->sanitizeValue($value);
   }

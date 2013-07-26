@@ -10,6 +10,7 @@ namespace Drupal\content_translation\Plugin\views\field;
 use Drupal\views\Plugin\views\field\FieldPluginBase;
 use Drupal\Component\Annotation\PluginID;
 use Drupal\Core\Entity\EntityInterface;
+use Drupal\views\ResultRow;
 
 /**
  * Provides a translation link for an entity.
@@ -44,7 +45,7 @@ class TranslationLink extends FieldPluginBase {
   /**
    * Overrides \Drupal\views\Plugin\views\field\FieldPluginBase::render().
    */
-  function render($values) {
+  public function render($values) {
     return $this->render_link($this->getEntity($values), $values);
   }
 
@@ -59,7 +60,7 @@ class TranslationLink extends FieldPluginBase {
    * @return string
    *   The acutal rendered text (without the link) of this field.
    */
-  public function render_link(EntityInterface $entity, \stdClass $values) {
+  public function render_link(EntityInterface $entity, ResultRow $values) {
     if (content_translation_translate_access($entity)) {
       $text = !empty($this->options['text']) ? $this->options['text'] : t('translate');
 

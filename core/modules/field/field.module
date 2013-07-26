@@ -157,7 +157,11 @@ function field_help($path, $arg) {
           $items['items'][] = $display;
         }
       }
-      $output .= theme('item_list', $items) . '</dd>';
+      $item_list = array(
+        '#theme' => 'item_list',
+        '#items' => $items['items'],
+      );
+      $output .= drupal_render($item_list) . '</dd>';
       $output .= '<dt>' . t('Managing field data storage') . '</dt>';
       $output .= '<dd>' . t('Developers of field modules can either use the default <a href="@sql-store">Field SQL Storage module</a> to store data for their fields, or a contributed or custom module developed using the <a href="@storage-api">field storage API</a>.', array('@storage-api' => 'http://api.drupal.org/api/group/field_storage/8', '@sql-store' => url('admin/help/field_sql_storage'))) . '</dd>';
       $output .= '</dl>';
@@ -403,7 +407,7 @@ function field_sync_field_status() {
 
   // Get both deleted and non-deleted field definitions.
   $fields = array();
-  foreach (config_get_storage_names_with_prefix('field.field') as $name) {
+  foreach (config_get_storage_names_with_prefix('field.field.') as $name) {
     $field = Drupal::config($name)->get();
     $fields[$field['uuid']] = $field;
   }
@@ -799,24 +803,11 @@ function field_view_field(EntityInterface $entity, $field_name, $display_options
   if ($formatter) {
     $display_langcode = field_language($entity, $field_name, $langcode);
 
-    // Get the items.
-    if ($entity->getNGEntity() instanceof EntityNG) {
-      $items = $entity->getTranslation($display_langcode)->get($field_name);
-      $definition = $entity->getPropertyDefinition($field_name);
-    }
-    else {
-      $definitions = \Drupal::entityManager()->getFieldDefinitions($entity_type, $bundle);
-      $definition = $definitions[$field_name];
-      $itemsBC = isset($entity->{$field_name}[$display_langcode]) ? $entity->{$field_name}[$display_langcode] : array();
-      $items = \Drupal::typedData()->create($definitions[$field_name], $itemsBC, $field_name, $entity);
-    }
-
     // Invoke the formatter's prepareView() and view() methods.
+    $items = $entity->getNGEntity()->getTranslation($display_langcode)->get($field_name);
     $id = $entity->id();
-    $itemsBC_multi = array($id => $items->getValue());
-    $formatter->prepareView(array($id => $entity), $display_langcode, $itemsBC_multi);
-    $itemsBC = $itemsBC_multi[$id];
-    $result = $formatter->view($entity, $display_langcode, $itemsBC);
+    $formatter->prepareView(array($id => $entity), $display_langcode, array($id => $items));
+    $result = $formatter->view($entity, $display_langcode, $items);
 
     // Invoke hook_field_attach_view_alter() to let other modules alter the
     // renderable array, as in a full field_attach_view() execution.
@@ -984,24 +975,18 @@ function template_preprocess_field(&$variables, $hook) {
     'field__' . $element['#bundle'],
     'field__' . $element['#field_name'] . '__' . $element['#bundle'],
   );
-}
 
-/**
- * Theme process function for theme_field() and field.html.twig.
- *
- * @see theme_field()
- * @see field.html.twig
- */
-function template_process_field(&$variables, $hook) {
   static $default_attributes;
-  // The default theme implementation is a function, so template_process() does
-  // not automatically run, so we need to flatten the classes and attributes
-  // here. For best performance, only instantiate Drupal\Core\Template\Attribute
-  // when needed, and note that template_preprocess_field() does not initialize
-  // the *_attributes variables.
   if (!isset($default_attributes)) {
     $default_attributes = new Attribute;
   }
+  // The default theme implementation for fields is a function.
+  // template_preprocess() (which initializes the attributes, title_attributes,
+  // and content_attributes arrays) does not run for theme function
+  // implementations. Additionally, Attribute objects for the three variables
+  // below only get instantiated for template file implementations, and we need
+  // Attribute objects for printing in both theme functions and template files.
+  // For best performance, we only instantiate Attribute objects when needed.
   $variables['attributes'] = isset($variables['attributes']) ? new Attribute($variables['attributes']) : clone $default_attributes;
   $variables['title_attributes'] = isset($variables['title_attributes']) ? new Attribute($variables['title_attributes']) : clone($default_attributes);
   $variables['content_attributes'] = isset($variables['content_attributes']) ? new Attribute($variables['content_attributes']) : clone($default_attributes);
@@ -1070,7 +1055,6 @@ function template_process_field(&$variables, $hook) {
  *   - attributes: A string containing the attributes for the wrapping div.
  *
  * @see template_preprocess_field()
- * @see template_process_field()
  * @see field.html.twig
  *
  * @ingroup themeable

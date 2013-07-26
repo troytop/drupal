@@ -821,31 +821,6 @@ function hook_menu() {
 }
 
 /**
- * Define route-based local actions.
- *
- * Instead of using MENU_LOCAL_ACTION in hook_menu(), implement
- * hook_local_actions().
- *
- * @return array
- *   An associative array containing the following keys:
- *   - route_name: The machine name of the local action route.
- *   - title: The title of the local action.
- *   - appears_on: An array of route names for this action to be display on.
- */
-function hook_local_actions() {
-  return array(
-    array(
-      'route_name' => 'mymodule.route.action',
-      'title' => t('Perform local action'),
-      'appears_on' => array(
-        'mymodule.other_route',
-        'mymodule.other_other_route',
-      ),
-    ),
-  );
-}
-
-/**
  * Alter the data being saved to the {menu_router} table after hook_menu is invoked.
  *
  * This hook is invoked by menu_router_build(). The menu definitions are passed
@@ -936,6 +911,32 @@ function hook_menu_local_tasks(&$data, $router_item, $root_path) {
  * @see hook_menu_local_tasks()
  */
 function hook_menu_local_tasks_alter(&$data, $router_item, $root_path) {
+}
+
+/**
+ * Alter local actions plugins.
+ *
+ * @param array $local_actions
+ *   The array of local action plugin definitions, keyed by plugin ID.
+ *
+ * @see \Drupal\Core\Menu\LocalActionInterface
+ * @see \Drupal\Core\Menu\LocalActionManager
+ */
+function hook_menu_local_actions_alter(&$local_actions) {
+}
+
+/**
+ * Alter local tasks plugins.
+ *
+ * @param array $local_tasks
+ *   The array of local tasks plugin definitions, keyed by plugin ID.
+ *
+ * @see \Drupal\Core\Menu\LocalTaskInterface
+ * @see \Drupal\Core\Menu\LocalTaskManager
+ */
+function hook_local_task_alter(&$local_tasks) {
+  // Remove a specified local task plugin.
+  unset($local_tasks['example_plugin_id']);
 }
 
 /**
@@ -1715,9 +1716,7 @@ function hook_template_preprocess_default_variables_alter(&$variables) {
  */
 function hook_custom_theme() {
   // Allow the user to request a particular theme via a query parameter.
-  if (isset($_GET['theme'])) {
-    return $_GET['theme'];
-  }
+  return Drupal::request()->query->get('theme');
 }
 
 /**
@@ -1862,7 +1861,7 @@ function hook_mail($key, &$message, $params) {
     $node = $params['node'];
     $variables += array(
       '%uid' => $node->uid,
-      '%node_url' => url('node/' . $node->nid, array('absolute' => TRUE)),
+      '%node_url' => url('node/' . $node->id(), array('absolute' => TRUE)),
       '%node_type' => node_get_type_label($node),
       '%title' => $node->title,
       '%teaser' => $node->teaser,
@@ -2175,7 +2174,7 @@ function hook_file_url_alter(&$uri) {
   global $user;
 
   // User 1 will always see the local file in this example.
-  if ($user->uid == 1) {
+  if ($user->id() == 1) {
     return;
   }
 
@@ -2643,14 +2642,14 @@ function hook_update_N(&$sandbox) {
     ->execute();
 
   foreach ($users as $user) {
-    $user->name .= '!';
+    $user->setUsername($user->getUsername() . '!');
     db_update('users')
-      ->fields(array('name' => $user->name))
-      ->condition('uid', $user->uid)
+      ->fields(array('name' => $user->getUsername()))
+      ->condition('uid', $user->id())
       ->execute();
 
     $sandbox['progress']++;
-    $sandbox['current_uid'] = $user->uid;
+    $sandbox['current_uid'] = $user->id();
   }
 
   $sandbox['#finished'] = empty($sandbox['max']) ? 1 : ($sandbox['progress'] / $sandbox['max']);
@@ -3074,7 +3073,7 @@ function hook_url_outbound_alter(&$path, &$options, $original_path) {
   // Instead of pointing to user/[uid]/edit, point to user/me/edit.
   if (preg_match('|^user/([0-9]*)/edit(/.*)?|', $path, $matches)) {
     global $user;
-    if ($user->uid == $matches[1]) {
+    if ($user->id() == $matches[1]) {
       $path = 'user/me/edit' . $matches[2];
     }
   }
@@ -3146,7 +3145,7 @@ function hook_tokens($type, $tokens, array $data = array(), array $options = arr
           break;
 
         case 'edit-url':
-          $replacements[$original] = url('node/' . $node->nid . '/edit', $url_options);
+          $replacements[$original] = url('node/' . $node->id() . '/edit', $url_options);
           break;
 
         // Default values for the chained tokens handled below.

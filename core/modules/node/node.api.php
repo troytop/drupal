@@ -187,7 +187,7 @@ function hook_node_grants($account, $op) {
   if (user_access('access private content', $account)) {
     $grants['example'] = array(1);
   }
-  $grants['example_owner'] = array($account->uid);
+  $grants['example_owner'] = array($account->id());
   return $grants;
 }
 
@@ -253,7 +253,7 @@ function hook_node_grants($account, $op) {
  * @return
  *   An array of grants as defined above.
  *
- * @see _node_access_write_grants()
+ * @see node_access_write_grants()
  * @see hook_node_access_records_alter()
  * @ingroup node_access
  */
@@ -379,7 +379,7 @@ function hook_node_grants_alter(&$grants, $account, $op) {
 
   if ($op != 'view' && !empty($restricted)) {
     // Now check the roles for this account against the restrictions.
-    foreach ($account->roles as $rid) {
+    foreach ($account->getRoles() as $rid) {
       if (in_array($rid, $restricted)) {
         $grants = array();
       }
@@ -403,7 +403,7 @@ function hook_node_grants_alter(&$grants, $account, $op) {
  */
 function hook_node_predelete(\Drupal\Core\Entity\EntityInterface $node) {
   db_delete('mytable')
-    ->condition('nid', $node->nid)
+    ->condition('nid', $node->id())
     ->execute();
 }
 
@@ -465,7 +465,7 @@ function hook_node_revision_delete(\Drupal\Core\Entity\EntityInterface $node) {
 function hook_node_insert(\Drupal\Core\Entity\EntityInterface $node) {
   db_insert('mytable')
     ->fields(array(
-      'nid' => $node->nid,
+      'nid' => $node->id(),
       'extra' => $node->extra,
     ))
     ->execute();
@@ -577,13 +577,13 @@ function hook_node_access($node, $op, $account, $langcode) {
     }
 
     if ($op == 'update') {
-      if (user_access('edit any ' . $type . ' content', $account) || (user_access('edit own ' . $type . ' content', $account) && ($account->uid == $node->uid))) {
+      if (user_access('edit any ' . $type . ' content', $account) || (user_access('edit own ' . $type . ' content', $account) && ($account->id() == $node->uid))) {
         return NODE_ACCESS_ALLOW;
       }
     }
 
     if ($op == 'delete') {
-      if (user_access('delete any ' . $type . ' content', $account) || (user_access('delete own ' . $type . ' content', $account) && ($account->uid == $node->uid))) {
+      if (user_access('delete any ' . $type . ' content', $account) || (user_access('delete own ' . $type . ' content', $account) && ($account->id() == $node->uid))) {
         return NODE_ACCESS_ALLOW;
       }
     }
@@ -639,7 +639,7 @@ function hook_node_prepare_form(\Drupal\node\NodeInterface $node, $form_display,
  * @ingroup node_api_hooks
  */
 function hook_node_search_result(\Drupal\Core\Entity\EntityInterface $node, $langcode) {
-  $comments = db_query('SELECT comment_count FROM {node_comment_statistics} WHERE nid = :nid', array('nid' => $node->nid))->fetchField();
+  $comments = db_query('SELECT comment_count FROM {node_comment_statistics} WHERE nid = :nid', array('nid' => $node->id()))->fetchField();
   return array('comment' => format_plural($comments, '1 comment', '@count comments'));
 }
 
@@ -655,7 +655,7 @@ function hook_node_search_result(\Drupal\Core\Entity\EntityInterface $node, $lan
  * @ingroup node_api_hooks
  */
 function hook_node_presave(\Drupal\Core\Entity\EntityInterface $node) {
-  if ($node->nid && $node->moderate) {
+  if ($node->id() && $node->moderate) {
     // Reset votes when node is updated:
     $node->score = 0;
     $node->users = '';
@@ -686,7 +686,7 @@ function hook_node_presave(\Drupal\Core\Entity\EntityInterface $node) {
 function hook_node_update(\Drupal\Core\Entity\EntityInterface $node) {
   db_update('mytable')
     ->fields(array('extra' => $node->extra))
-    ->condition('nid', $node->nid)
+    ->condition('nid', $node->id())
     ->execute();
 }
 
@@ -708,7 +708,7 @@ function hook_node_update(\Drupal\Core\Entity\EntityInterface $node) {
  */
 function hook_node_update_index(\Drupal\Core\Entity\EntityInterface $node, $langcode) {
   $text = '';
-  $comments = db_query('SELECT subject, comment, format FROM {comment} WHERE nid = :nid AND status = :status', array(':nid' => $node->nid, ':status' => COMMENT_PUBLISHED));
+  $comments = db_query('SELECT subject, comment, format FROM {comment} WHERE nid = :nid AND status = :status', array(':nid' => $node->id(), ':status' => COMMENT_PUBLISHED));
   foreach ($comments as $comment) {
     $text .= '<h2>' . check_plain($comment->subject->value) . '</h2>' . $comment->comment_body->processed;
   }

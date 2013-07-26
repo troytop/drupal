@@ -753,7 +753,7 @@ class ViewUI implements ViewStorageInterface {
     // Let any future object know that this view has changed.
     $this->changed = TRUE;
 
-    $executable = $this->get('executable');
+    $executable = $this->getExecutable();
     if (isset($executable->current_display)) {
       // Add the knowledge of the changed display, too.
       $this->changed_display[$executable->current_display] = TRUE;
@@ -775,7 +775,7 @@ class ViewUI implements ViewStorageInterface {
    *   TRUE if the view is locked, FALSE otherwise.
    */
   public function isLocked() {
-    return is_object($this->lock) && ($this->lock->owner != $GLOBALS['user']->uid);
+    return is_object($this->lock) && ($this->lock->owner != $GLOBALS['user']->id());
   }
 
   /**

@@ -555,7 +555,7 @@ function entity_get_form(EntityInterface $entity, $operation = 'default', array 
  * so the builder function for such forms needs to implement the required
  * functionality instead of calling this function.
  */
-function entity_form_submit_build_entity($entity_type, $entity, $form, &$form_state) {
+function entity_form_submit_build_entity($entity_type, $entity, $form, &$form_state, array $options = array()) {
   $info = entity_get_info($entity_type);
 
   // Copy top-level form values that are not for fields to entity properties,
@@ -576,7 +576,7 @@ function entity_form_submit_build_entity($entity_type, $entity, $form, &$form_st
 
   // Copy field values to the entity.
   if ($info['fieldable']) {
-    field_attach_extract_form_values($entity, $form, $form_state);
+    field_attach_extract_form_values($entity, $form, $form_state, $options);
   }
 }
 
@@ -865,21 +865,11 @@ function entity_page_access(EntityInterface $entity, $operation = 'view') {
  *   The entity type.
  * @param string $bundle
  *   (optional) The bundle of the entity. Required if the entity supports
- *   bundles, defaults to the entity type otherwise.
+ *   bundles, defaults to NULL otherwise.
  *
  * @return bool
  *   TRUE if the access is granted. FALSE if access is denied.
  */
 function entity_page_create_access($entity_type, $bundle = NULL) {
-  $definition = Drupal::entityManager()->getDefinition($entity_type);
-
-  // Pass in the entity bundle if given and required.
-  $values = array();
-  if ($bundle && isset($definition['entity_keys']['bundle'])) {
-    $values[$definition['entity_keys']['bundle']] = $bundle;
-  }
-  $entity = Drupal::entityManager()
-    ->getStorageController($entity_type)
-    ->create($values);
-  return $entity->access('create');
+  return Drupal::entityManager()->getAccessController($entity_type)->createAccess($bundle);
 }

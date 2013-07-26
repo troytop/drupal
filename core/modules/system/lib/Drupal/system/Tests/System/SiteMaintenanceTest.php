@@ -79,7 +79,7 @@ class SiteMaintenanceTest extends WebTestBase {
     // Log in user and verify that maintenance mode message is displayed
     // directly after login.
     $edit = array(
-      'name' => $this->user->name,
+      'name' => $this->user->getUsername(),
       'pass' => $this->user->pass_raw,
     );
     $this->drupalPost(NULL, $edit, t('Log in'));
@@ -108,12 +108,12 @@ class SiteMaintenanceTest extends WebTestBase {
 
     // Submit password reset form.
     $edit = array(
-      'name' => $this->user->name,
+      'name' => $this->user->getUsername(),
     );
     $this->drupalPost('user/password', $edit, t('E-mail new password'));
     $mails = $this->drupalGetMails();
-    $start = strpos($mails[0]['body'], 'user/reset/'. $this->user->uid);
-    $path = substr($mails[0]['body'], $start, 66 + strlen($this->user->uid));
+    $start = strpos($mails[0]['body'], 'user/reset/'. $this->user->id());
+    $path = substr($mails[0]['body'], $start, 66 + strlen($this->user->id()));
 
     // Log in with temporary login link.
     $this->drupalPost($path, array(), t('Log in'));

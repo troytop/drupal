@@ -52,7 +52,7 @@ class NodeSaveTest extends NodeTestBase {
     $node = array(
       'title' => $title,
       'body' => array(array('value' => $this->randomName(32))),
-      'uid' => $this->web_user->uid,
+      'uid' => $this->web_user->id(),
       'type' => 'article',
       'nid' => $test_nid,
     );
@@ -60,7 +60,7 @@ class NodeSaveTest extends NodeTestBase {
     $node->enforceIsNew();
 
     // Verify that node_submit did not overwrite the user ID.
-    $this->assertEqual($node->uid, $this->web_user->uid, 'Function node_submit() preserves user ID');
+    $this->assertEqual($node->uid, $this->web_user->id(), 'Function node_submit() preserves user ID');
 
     $node->save();
     // Test the import.
@@ -77,7 +77,7 @@ class NodeSaveTest extends NodeTestBase {
   function testTimestamps() {
     // Use the default timestamps.
     $edit = array(
-      'uid' => $this->web_user->uid,
+      'uid' => $this->web_user->id(),
       'type' => 'article',
       'title' => $this->randomName(8),
     );
@@ -105,7 +105,7 @@ class NodeSaveTest extends NodeTestBase {
 
     // Programmatically set the timestamps on the node.
     $edit = array(
-      'uid' => $this->web_user->uid,
+      'uid' => $this->web_user->id(),
       'type' => 'article',
       'title' => $this->randomName(8),
       'created' => 280299600, // Sun, 19 Nov 1978 05:00:00 GMT
@@ -136,7 +136,7 @@ class NodeSaveTest extends NodeTestBase {
   function testDeterminingChanges() {
     // Initial creation.
     $node = entity_create('node', array(
-      'uid' => $this->web_user->uid,
+      'uid' => $this->web_user->id(),
       'type' => 'article',
       'title' => 'test_changes',
     ));
@@ -155,7 +155,7 @@ class NodeSaveTest extends NodeTestBase {
     $this->assertEqual($node->label(), 'updated_presave_update', 'Changes have been determined.');
 
     // Test the static node load cache to be cleared.
-    $node = node_load($node->nid);
+    $node = node_load($node->id());
     $this->assertEqual($node->label(), 'updated_presave', 'Static cache has been cleared.');
   }
 
@@ -172,6 +172,6 @@ class NodeSaveTest extends NodeTestBase {
     // node_test_node_insert() tiggers a save on insert if the title equals
     // 'new'.
     $node = $this->drupalCreateNode(array('title' => 'new'));
-    $this->assertEqual($node->title, 'Node ' . $node->nid, 'Node saved on node insert.');
+    $this->assertEqual($node->title, 'Node ' . $node->id(), 'Node saved on node insert.');
   }
 }

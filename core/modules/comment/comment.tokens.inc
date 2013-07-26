@@ -139,8 +139,7 @@ function comment_tokens($type, $tokens, array $data = array(), array $options = 
 
         case 'mail':
           if ($comment->uid->target_id != 0) {
-            $account = user_load($comment->uid->target_id);
-            $mail = $account->mail;
+            $mail = $comment->uid->entity->getEmail();
           }
           else {
             $mail = $comment->mail->value;
@@ -231,7 +230,7 @@ function comment_tokens($type, $tokens, array $data = array(), array $options = 
           break;
 
         case 'comment-count-new':
-          $replacements[$original] = comment_num_new($node->nid);
+          $replacements[$original] = comment_num_new($node->id());
           break;
       }
     }

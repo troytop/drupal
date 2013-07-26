@@ -3,6 +3,11 @@ services:
     class: Drupal\system\Access\CronAccessCheck
     tags:
       - { name: access_check }
+  access_check.system_plugin_ui:
+    class: Drupal\system\Access\SystemPluginUiCheck
+    tags:
+      - { name: access_check }
+    arguments: ['@plugin.manager.system.plugin_ui']
   plugin.manager.system.plugin_ui:
     class: Drupal\system\Plugin\Type\PluginUIManager
     arguments: ['@container.namespaces']
@@ -13,6 +18,10 @@ services:
     class: Drupal\system\LegacyBreadcrumbBuilder
     tags:
       - {name: breadcrumb_builder, priority: 500}
+  path_processor.files:
+    class: Drupal\system\PathProcessor\PathProcessorFiles
+    tags:
+      - { name: path_processor_inbound, priority: 200 }
   system.route_subscriber:
     class: Drupal\system\Routing\RouteSubscriber
     tags:

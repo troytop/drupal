@@ -7,8 +7,13 @@
 
 namespace Drupal\field\Plugin\Type\Widget;
 
+use Drupal\Component\Plugin\Factory\DefaultFactory;
 use Drupal\Component\Plugin\PluginManagerBase;
 use Drupal\Component\Plugin\Discovery\ProcessDecorator;
+use Drupal\Core\Cache\CacheBackendInterface;
+use Drupal\Core\Extension\ModuleHandlerInterface;
+use Drupal\Core\Language\LanguageManager;
+use Drupal\Core\Plugin\DefaultPluginManager;
 use Drupal\Core\Plugin\Discovery\CacheDecorator;
 use Drupal\Core\Plugin\Discovery\AlterDecorator;
 use Drupal\Core\Plugin\Discovery\AnnotatedClassDiscovery;
@@ -16,7 +21,7 @@ use Drupal\Core\Plugin\Discovery\AnnotatedClassDiscovery;
 /**
  * Plugin type manager for field widgets.
  */
-class WidgetPluginManager extends PluginManagerBase {
+class WidgetPluginManager extends DefaultPluginManager {
 
   /**
    * An array of widget options for each field type.
@@ -26,29 +31,27 @@ class WidgetPluginManager extends PluginManagerBase {
   protected $widgetOptions;
 
   /**
-   * Overrides Drupal\Component\Plugin\PluginManagerBase:$defaults.
-   */
-  protected $defaults = array(
-    'field_types' => array(),
-    'settings' => array(),
-    'multiple_values' => FALSE,
-    'default_value' => TRUE,
-  );
-
-  /**
    * Constructs a WidgetPluginManager object.
    *
    * @param \Traversable $namespaces
    *   An object that implements \Traversable which contains the root paths
-   *   keyed by the corresponding namespace to look for plugin implementations,
+   *   keyed by the corresponding namespace to look for plugin implementations.
+   * @param \Drupal\Core\Cache\CacheBackendInterface $cache_backend
+   *   Cache backend instance to use.
+   * @param \Drupal\Core\Extension\ModuleHandlerInterface $module_handler
+   *   The module handler.
+   * @param \Drupal\Core\Language\LanguageManager $language_manager
+   *   The language manager.
    */
-  public function __construct(\Traversable $namespaces) {
-    $this->discovery = new AnnotatedClassDiscovery('field/widget', $namespaces);
-    $this->discovery = new ProcessDecorator($this->discovery, array($this, 'processDefinition'));
-    $this->discovery = new AlterDecorator($this->discovery, 'field_widget_info');
-    $this->discovery = new CacheDecorator($this->discovery, 'field_widget_types',  'field');
+  public function __construct(\Traversable $namespaces, CacheBackendInterface $cache_backend, ModuleHandlerInterface $module_handler, LanguageManager $language_manager) {
+    $annotation_namespaces = array('Drupal\field\Annotation' => $namespaces['Drupal\field']);
 
-    $this->factory = new WidgetFactory($this->discovery);
+    parent::__construct('Plugin/field/widget', $namespaces, $annotation_namespaces, 'Drupal\field\Annotation\FieldWidget');
+
+    $this->setCacheBackend($cache_backend, $language_manager, 'field_widget_types');
+    $this->alterInfo($module_handler, 'field_widget_info');
+
+    $this->factory = new WidgetFactory($this);
   }
 
   /**
@@ -99,6 +102,22 @@ class WidgetPluginManager extends PluginManagerBase {
     );
     return $this->createInstance($plugin_id, $configuration);
   }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function createInstance($plugin_id, array $configuration = array()) {
+    $plugin_definition = $this->discovery->getDefinition($plugin_id);
+    $plugin_class = DefaultFactory::getPluginClass($plugin_id, $plugin_definition);
+
+    // If the plugin provides a factory method, pass the container to it.
+    if (is_subclass_of($plugin_class, 'Drupal\Core\Plugin\ContainerFactoryPluginInterface')) {
+      return $plugin_class::create(\Drupal::getContainer(), $configuration, $plugin_id, $plugin_definition);
+    }
+
+    return new $plugin_class($plugin_id, $plugin_definition, $configuration['field_definition'], $configuration['settings']);
+  }
+
 
   /**
    * Merges default values for widget configuration.

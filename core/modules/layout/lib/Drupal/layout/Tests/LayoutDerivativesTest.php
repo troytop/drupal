@@ -33,7 +33,7 @@ class LayoutDerivativesTest extends WebTestBase {
    * Tests for module/theme layout derivatives.
    */
   function testDerivatives() {
-    $manager = drupal_container()->get('plugin.manager.layout');
+    $manager = $this->container->get('plugin.manager.layout');
 
     $definitions = $manager->getDefinitions();
     $this->assertTrue(is_array($definitions), 'Definitions found.');
@@ -105,6 +105,6 @@ class LayoutDerivativesTest extends WebTestBase {
     $this->assertRaw('<div class="layout-region layout-col-right">');
 
     // Ensure the CSS was added.
-    $this->assertRaw('@import url("' . url('', array('absolute' => TRUE)) . drupal_get_path('theme', 'layout_test_theme') . '/layouts/static/two-col/two-col.css');
+    $this->assertRaw(url('', array('absolute' => TRUE)) . drupal_get_path('theme', 'layout_test_theme') . '/layouts/static/two-col/two-col.css');
   }
 }

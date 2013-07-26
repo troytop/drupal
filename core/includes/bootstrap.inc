@@ -713,7 +713,7 @@ function drupal_settings_initialize() {
  *
  * This function plays a key role in allowing Drupal's resources (modules
  * and themes) to be located in different places depending on a site's
- * configuration. For example, a module 'foo' may legally be be located
+ * configuration. For example, a module 'foo' may legally be located
  * in any of these three places:
  *
  * core/modules/foo/foo.module
@@ -724,7 +724,7 @@ function drupal_settings_initialize() {
  * the above, depending on where the module is located.
  *
  * @param $type
- *   The type of the item (i.e. theme, theme_engine, module, profile).
+ *   The type of the item (theme, theme_engine, module, profile).
  * @param $name
  *   The name of the item for which the filename is requested.
  * @param $filename
@@ -1550,7 +1550,7 @@ function watchdog($type, $message, array $variables = NULL, $severity = WATCHDOG
     $in_error_state = TRUE;
 
     // The user object may not exist in all conditions, so 0 is substituted if needed.
-    $user_uid = isset($user->uid) ? $user->uid : 0;
+    $user_uid = isset($user) ? $user->id() : 0;
 
     // Prepare the fields to be logged
     $log_entry = array(
@@ -1898,8 +1898,8 @@ function drupal_get_user_timezone() {
   global $user;
   $config = config('system.timezone');
 
-  if ($user && $config->get('user.configurable') && $user->uid && $user->timezone) {
-    return $user->timezone;
+  if ($user && $config->get('user.configurable') && $user->isAuthenticated() && $user->getTimezone()) {
+    return $user->getTimezone();
   }
   else {
     // Ignore PHP strict notice if time zone has not yet been set in the php.ini
@@ -2024,12 +2024,7 @@ function _drupal_bootstrap_kernel() {
 function _drupal_bootstrap_page_cache() {
   global $user;
 
-  // Allow specifying special cache handlers in settings.php, like
-  // using memcached or files for storing cache information.
   require_once __DIR__ . '/cache.inc';
-  foreach (variable_get('cache_backends', array()) as $include) {
-    require_once DRUPAL_ROOT . '/' . $include;
-  }
   // Check for a cache mode force from settings.php.
   if (settings()->get('page_cache_without_database')) {
     $cache_enabled = TRUE;
@@ -2435,10 +2430,7 @@ function language_types_get_default() {
  *   TRUE if more than one language is enabled.
  */
 function language_multilingual() {
-  // The "language_count" variable stores the number of enabled languages to
-  // avoid unnecessarily querying the database when building the list of
-  // enabled languages on monolingual sites.
-  return variable_get('language_count', 1) > 1;
+  return Drupal::languageManager()->isMultilingual();
 }
 
 /**

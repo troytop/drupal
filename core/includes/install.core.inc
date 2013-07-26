@@ -366,9 +366,6 @@ function install_begin_request(&$install_state) {
     // Add the file translation service to the container.
     $container->set('string_translator.file_translation', install_file_translation_service());
     $container->get('string_translation')->addTranslator($container->get('string_translator.file_translation'));
-    // Set the request in the kernel to the new created Request above
-    // so it is available to the rest of the installation process.
-    $container->set('request', $request);
   }
   else {
     // @todo Move into a proper Drupal\Core\DependencyInjection\InstallContainerBuilder.
@@ -389,7 +386,9 @@ function install_begin_request(&$install_state) {
       ->addArgument(new Reference('config.context'));
 
     // Register the 'language_manager' service.
-    $container->register('language_manager', 'Drupal\Core\Language\LanguageManager');
+    $container
+      ->register('language_manager', 'Drupal\Core\Language\LanguageManager')
+      ->addArgument(NULL);
 
     // Register the translation services.
     install_register_translation_service($container);
@@ -436,8 +435,16 @@ function install_begin_request(&$install_state) {
 
     $container->register('url_generator', 'Drupal\Core\Routing\NullGenerator');
 
-    Drupal::setContainer($container);
+    // Register the CSS and JavaScript asset collection renderers.
+    $container->register('asset.css.collection_renderer', 'Drupal\Core\Asset\CssCollectionRenderer');
+    $container->register('asset.js.collection_renderer', 'Drupal\Core\Asset\JsCollectionRenderer');
+
   }
+  // Set the request in the kernel to the new created Request above
+  // so it is available to the rest of the installation process.
+  $container->set('request', $request);
+
+  Drupal::setContainer($container);
 
   // Set up $language, so t() caller functions will still work.
   drupal_language_initialize();
@@ -2530,8 +2537,8 @@ function install_configure_form_submit($form, &$form_state) {
   // We precreated user 1 with placeholder values. Let's save the real values.
   $account = user_load(1);
   $account->init = $account->mail = $form_state['values']['account']['mail'];
-  $account->roles = !empty($account->roles) ? $account->roles : array();
-  $account->status = 1;
+  $account->roles = $account->getRoles();
+  $account->activate();
   $account->timezone = $form_state['values']['date_default_timezone'];
   $account->pass = $form_state['values']['account']['pass'];
   $account->name = $form_state['values']['account']['name'];

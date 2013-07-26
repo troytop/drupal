@@ -2,17 +2,20 @@
 
 /**
  * @file
- * Definition of Drupal\simpletest\WebTestBase.
+ * Definition of \Drupal\simpletest\WebTestBase.
  */
 
 namespace Drupal\simpletest;
 
 use Drupal\Component\Utility\Crypt;
 use Drupal\Component\Utility\NestedArray;
+use Drupal\Component\Utility\String;
 use Drupal\Core\DrupalKernel;
 use Drupal\Core\Database\Database;
 use Drupal\Core\Database\ConnectionNotDefinedException;
 use Drupal\Core\Language\Language;
+use Drupal\Core\Session\AccountInterface;
+use Drupal\Core\Session\UserSession;
 use PDO;
 use stdClass;
 use DOMDocument;
@@ -72,14 +75,16 @@ abstract class WebTestBase extends TestBase {
   protected $content;
 
   /**
-   * The content of the page currently loaded in the internal browser (plain text version).
+   * The plain-text content of the currently-loaded page.
    *
    * @var string
    */
   protected $plainTextContent;
 
   /**
-   * The value of the Drupal.settings JavaScript variable for the page currently loaded in the internal browser.
+   * The value of Drupal.settings for the currently-loaded page.
+   *
+   * Drupal.settings refers to the Drupal.settings JavaScript variable.
    *
    * @var Array
    */
@@ -110,27 +115,27 @@ abstract class WebTestBase extends TestBase {
   /**
    * Additional cURL options.
    *
-   * Drupal\simpletest\WebTestBase itself never sets this but always obeys what is
-   * set.
+   * \Drupal\simpletest\WebTestBase itself never sets this but always obeys what
+   * is set.
    */
   protected $additionalCurlOptions = array();
 
   /**
-   * The original user, before it was changed to a clean uid = 1 for testing purposes.
+   * The original user, before it was changed to a clean uid = 1 for testing.
    *
    * @var object
    */
   protected $originalUser = NULL;
 
   /**
-   * The original shutdown handlers array, before it was cleaned for testing purposes.
+   * The original shutdown handlers array, before it was cleaned for testing.
    *
    * @var array
    */
   protected $originalShutdownCallbacks = array();
 
   /**
-   * HTTP authentication method
+   * HTTP authentication method.
    */
   protected $httpauth_method = CURLAUTH_BASIC;
 
@@ -170,7 +175,7 @@ abstract class WebTestBase extends TestBase {
   protected $kernel;
 
   /**
-   * Constructor for Drupal\simpletest\WebTestBase.
+   * Constructor for \Drupal\simpletest\WebTestBase.
    */
   function __construct($test_id = NULL) {
     parent::__construct($test_id);
@@ -266,11 +271,11 @@ abstract class WebTestBase extends TestBase {
     // logged in user if available, or else the user running the test.
     if (!isset($settings['uid'])) {
       if ($this->loggedInUser) {
-        $settings['uid'] = $this->loggedInUser->uid;
+        $settings['uid'] = $this->loggedInUser->id();
       }
       else {
         global $user;
-        $settings['uid'] = $user->uid;
+        $settings['uid'] = $user->id();
       }
     }
 
@@ -319,7 +324,8 @@ abstract class WebTestBase extends TestBase {
 
     $this->assertEqual($status, SAVED_NEW, t('Created content type %type.', array('%type' => $type->id())));
 
-    // Reset permissions so that permissions for this content type are available.
+    // Reset permissions so that permissions for this content type are
+    // available.
     $this->checkPermissions(array(), TRUE);
 
     return $type;
@@ -377,12 +383,14 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Get a list files that can be used in tests.
+   * Gets a list files that can be used in tests.
    *
    * @param $type
-   *   File type, possible values: 'binary', 'html', 'image', 'javascript', 'php', 'sql', 'text'.
+   *   File type, possible values: 'binary', 'html', 'image', 'javascript',
+   *   'php', 'sql', 'text'.
    * @param $size
    *   File size in bytes to match. Please check the tests/files folder.
+   *
    * @return
    *   List of files that match filter.
    */
@@ -482,8 +490,8 @@ abstract class WebTestBase extends TestBase {
     $account = entity_create('user', $edit);
     $account->save();
 
-    $this->assertTrue(!empty($account->uid), t('User created with name %name and pass %pass', array('%name' => $edit['name'], '%pass' => $edit['pass'])), t('User login'));
-    if (empty($account->uid)) {
+    $this->assertTrue($account->id(), String::format('User created with name %name and pass %pass', array('%name' => $edit['name'], '%pass' => $edit['pass'])), 'User login');
+    if (!$account->id()) {
       return FALSE;
     }
 
@@ -567,6 +575,7 @@ abstract class WebTestBase extends TestBase {
    *   Permissions to check.
    * @param $reset
    *   Reset cached available permissions.
+   *
    * @return
    *   TRUE or FALSE depending on whether the permissions are valid.
    */
@@ -605,22 +614,22 @@ abstract class WebTestBase extends TestBase {
    *   $this->drupalLogin($account);
    *   // Load real user object.
    *   $pass_raw = $account->pass_raw;
-   *   $account = user_load($account->uid);
+   *   $account = user_load($account->id());
    *   $account->pass_raw = $pass_raw;
    * @endcode
    *
-   * @param \Drupal\user\UserInterface $account
+   * @param \Drupal\Core\Session\AccountInterface $account
    *   User object representing the user to log in.
    *
    * @see drupalCreateUser()
    */
-  protected function drupalLogin($account) {
+  protected function drupalLogin(AccountInterface $account) {
     if ($this->loggedInUser) {
       $this->drupalLogout();
     }
 
     $edit = array(
-      'name' => $account->name,
+      'name' => $account->getUsername(),
       'pass' => $account->pass_raw
     );
     $this->drupalPost('user', $edit, t('Log in'));
@@ -629,7 +638,7 @@ abstract class WebTestBase extends TestBase {
     if (isset($this->session_id)) {
       $account->session_id = $this->session_id;
     }
-    $pass = $this->assert($this->drupalUserIsLoggedIn($account), format_string('User %name successfully logged in.', array('%name' => $account->name)), 'User login');
+    $pass = $this->assert($this->drupalUserIsLoggedIn($account), format_string('User %name successfully logged in.', array('%name' => $account->getUsername())), 'User login');
     if ($pass) {
       $this->loggedInUser = $account;
     }
@@ -657,17 +666,19 @@ abstract class WebTestBase extends TestBase {
     return Crypt::hmacBase64($value, $this->session_id . $private_key);
   }
 
-  /*
-   * Logs a user out of the internal browser, then check the login page to confirm logout.
+  /**
+   * Logs a user out of the internal browser and confirms.
+   *
+   * Confirms logout by checking the login page.
    */
   protected function drupalLogout() {
     // Make a request to the logout page, and redirect to the user page, the
     // idea being if you were properly logged out you should be seeing a login
     // screen.
     $this->drupalGet('user/logout', array('query' => array('destination' => 'user')));
-    $this->assertResponse(200, t('User was logged out.'));
-    $pass = $this->assertField('name', t('Username field found.'), t('Logout'));
-    $pass = $pass && $this->assertField('pass', t('Password field found.'), t('Logout'));
+    $this->assertResponse(200, 'User was logged out.');
+    $pass = $this->assertField('name', 'Username field found.', 'Logout');
+    $pass = $pass && $this->assertField('pass', 'Password field found.', 'Logout');
 
     if ($pass) {
       // @see WebTestBase::drupalUserIsLoggedIn()
@@ -680,7 +691,7 @@ abstract class WebTestBase extends TestBase {
    * Sets up a Drupal site for running functional and integration tests.
    *
    * Generates a random database prefix and installs Drupal with the specified
-   * installation profile in Drupal\simpletest\WebTestBase::$profile into the
+   * installation profile in \Drupal\simpletest\WebTestBase::$profile into the
    * prefixed database. Afterwards, installs any additional modules specified by
    * the test.
    *
@@ -693,9 +704,9 @@ abstract class WebTestBase extends TestBase {
    *   List of modules to enable for the duration of the test. This can be
    *   either a single array or a variable number of string arguments.
    *
-   * @see Drupal\simpletest\WebTestBase::prepareDatabasePrefix()
-   * @see Drupal\simpletest\WebTestBase::changeDatabasePrefix()
-   * @see Drupal\simpletest\WebTestBase::prepareEnvironment()
+   * @see \Drupal\simpletest\WebTestBase::prepareDatabasePrefix()
+   * @see \Drupal\simpletest\WebTestBase::changeDatabasePrefix()
+   * @see \Drupal\simpletest\WebTestBase::prepareEnvironment()
    */
   protected function setUp() {
     global $user, $conf;
@@ -722,7 +733,7 @@ abstract class WebTestBase extends TestBase {
 
     // Change the database prefix.
     // All static variables need to be reset before the database prefix is
-    // changed, since Drupal\Core\Utility\CacheArray implementations attempt to
+    // changed, since \Drupal\Core\Utility\CacheArray implementations attempt to
     // write back to persistent caches when they are destructed.
     $this->changeDatabasePrefix();
     if (!$this->setupDatabasePrefix) {
@@ -735,12 +746,12 @@ abstract class WebTestBase extends TestBase {
     $conf['simpletest_parent_profile'] = $this->originalProfile;
 
     // Define information about the user 1 account.
-    $this->root_user = (object) array(
+    $this->root_user = new UserSession(array(
       'uid' => 1,
       'name' => 'admin',
       'mail' => 'admin@example.com',
       'pass_raw' => $this->randomName(),
-    );
+    ));
 
     // Reset the static batch to remove Simpletest's batch operations.
     $batch = &batch_get();
@@ -843,7 +854,7 @@ abstract class WebTestBase extends TestBase {
           'site_mail' => 'simpletest@example.com',
           'account' => array(
             'name' => $this->root_user->name,
-            'mail' => $this->root_user->mail,
+            'mail' => $this->root_user->getEmail(),
             'pass' => array(
               'pass1' => $this->root_user->pass_raw,
               'pass2' => $this->root_user->pass_raw,
@@ -892,7 +903,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Overrides Drupal\simpletest\TestBase::rebuildContainer().
+   * Overrides \Drupal\simpletest\TestBase::rebuildContainer().
    */
   protected function rebuildContainer() {
     parent::rebuildContainer();
@@ -902,11 +913,11 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Reset all data structures after having enabled new modules.
+   * Resets all data structures after having enabled new modules.
    *
-   * This method is called by Drupal\simpletest\WebTestBase::setUp() after enabling
-   * the requested modules. It must be called again when additional modules
-   * are enabled later.
+   * This method is called by \Drupal\simpletest\WebTestBase::setUp() after
+   * enabling the requested modules. It must be called again when additional
+   * modules are enabled later.
    */
   protected function resetAll() {
     // Clear all database and static caches and rebuild data structures.
@@ -919,27 +930,33 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Refresh the in-memory set of variables. Useful after a page request is made
-   * that changes a variable in a different thread.
+   * Refreshes the in-memory set of variables.
    *
-   * In other words calling a settings page with $this->drupalPost() with a changed
-   * value would update a variable to reflect that change, but in the thread that
-   * made the call (thread running the test) the changed variable would not be
-   * picked up.
+   * Useful after a page request is made that changes a variable in a different
+   * thread.
    *
-   * This method clears the variables cache and loads a fresh copy from the database
-   * to ensure that the most up-to-date set of variables is loaded.
+   * In other words calling a settings page with $this->drupalPost() with a
+   * changed value would update a variable to reflect that change, but in the
+   * thread that made the call (thread running the test) the changed variable
+   * would not be picked up.
+   *
+   * This method clears the variables cache and loads a fresh copy from the
+   * database to ensure that the most up-to-date set of variables is loaded.
    */
   protected function refreshVariables() {
     global $conf;
     cache('bootstrap')->delete('variables');
     $conf = variable_initialize();
+    // Clear the tag cache.
+    drupal_static_reset('Drupal\Core\Cache\CacheBackendInterface::tagCache');
     drupal_container()->get('config.factory')->reset();
   }
 
   /**
-   * Delete created files and temporary files directory, delete the tables created by setUp(),
-   * and reset the database prefix.
+   * Cleans up after testing.
+   *
+   * Deletes created files and temporary files directory, deletes the tables
+   * created by setUp(), and resets the database prefix.
    */
   protected function tearDown() {
     // Destroy the testing kernel.
@@ -981,8 +998,10 @@ abstract class WebTestBase extends TestBase {
         CURLOPT_URL => $base_url,
         CURLOPT_FOLLOWLOCATION => FALSE,
         CURLOPT_RETURNTRANSFER => TRUE,
-        CURLOPT_SSL_VERIFYPEER => FALSE, // Required to make the tests run on HTTPS.
-        CURLOPT_SSL_VERIFYHOST => FALSE, // Required to make the tests run on HTTPS.
+        // Required to make the tests run on HTTPS.
+        CURLOPT_SSL_VERIFYPEER => FALSE,
+        // Required to make the tests run on HTTPS.
+        CURLOPT_SSL_VERIFYHOST => FALSE,
         CURLOPT_HEADERFUNCTION => array(&$this, 'curlHeaderCallback'),
         CURLOPT_USERAGENT => $this->databasePrefix,
       );
@@ -1100,20 +1119,20 @@ abstract class WebTestBase extends TestBase {
       '@status' => $status,
       '!length' => format_size(strlen($this->drupalGetContent()))
     );
-    $message = t('!method @url returned @status (!length).', $message_vars);
-    $this->assertTrue($this->drupalGetContent() !== FALSE, $message, t('Browser'));
+    $message = String::format('!method @url returned @status (!length).', $message_vars);
+    $this->assertTrue($this->drupalGetContent() !== FALSE, $message, 'Browser');
     return $this->drupalGetContent();
   }
 
   /**
    * Reads headers and registers errors received from the tested site.
    *
-   * @see _drupal_log_error().
-   *
    * @param $curlHandler
    *   The cURL handler.
    * @param $header
    *   An header.
+   *
+   * @see _drupal_log_error().
    */
   protected function curlHeaderCallback($curlHandler, $header) {
     // Header fields can be extended over multiple lines by preceding each
@@ -1129,9 +1148,10 @@ abstract class WebTestBase extends TestBase {
 
     // Errors are being sent via X-Drupal-Assertion-* headers,
     // generated by _drupal_log_error() in the exact form required
-    // by Drupal\simpletest\WebTestBase::error().
+    // by \Drupal\simpletest\WebTestBase::error().
     if (preg_match('/^X-Drupal-Assertion-[0-9]+: (.*)$/', $header, $matches)) {
-      // Call Drupal\simpletest\WebTestBase::error() with the parameters from the header.
+      // Call \Drupal\simpletest\WebTestBase::error() with the parameters from
+      // the header.
       call_user_func_array(array(&$this, 'error'), unserialize(urldecode($matches[1])));
     }
 
@@ -1201,6 +1221,7 @@ abstract class WebTestBase extends TestBase {
    * @param $headers
    *   An array containing additional HTTP request headers, each formatted as
    *   "name: value".
+   *
    * @return
    *   The retrieved HTML string, also available as $this->drupalGetContent()
    */
@@ -1212,7 +1233,8 @@ abstract class WebTestBase extends TestBase {
     // previous options.
     $url = $this->container->get('url_generator')->generateFromPath($path, $options);
     $out = $this->curlExec(array(CURLOPT_HTTPGET => TRUE, CURLOPT_URL => $url, CURLOPT_NOBODY => FALSE, CURLOPT_HTTPHEADER => $headers));
-    $this->refreshVariables(); // Ensure that any changes to variables in the other thread are picked up.
+    // Ensure that any changes to variables in the other thread are picked up.
+    $this->refreshVariables();
 
     // Replace original page output with new output from redirected page(s).
     if ($new = $this->checkForMetaRefresh()) {
@@ -1250,7 +1272,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Requests a Drupal path in drupal_ajax format, and JSON decodes the response.
+   * Requests a Drupal path in drupal_ajax format and JSON-decodes the response.
    */
   protected function drupalGetAJAX($path, array $options = array(), array $headers = array()) {
     $headers[] = 'Accept: application/vnd.drupal-ajax';
@@ -1258,7 +1280,8 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Execute a POST request on a Drupal page.
+   * Executes a POST request on a Drupal page.
+   *
    * It will be done as usual POST request with SimpleBrowser.
    *
    * @param $path
@@ -1399,10 +1422,12 @@ abstract class WebTestBase extends TestBase {
             $post = implode('&', $post) . $extra_post;
           }
           $out = $this->curlExec(array(CURLOPT_URL => $action, CURLOPT_POST => TRUE, CURLOPT_POSTFIELDS => $post, CURLOPT_HTTPHEADER => $headers));
-          // Ensure that any changes to variables in the other thread are picked up.
+          // Ensure that any changes to variables in the other thread are picked
+          // up.
           $this->refreshVariables();
 
-          // Replace original page output with new output from redirected page(s).
+          // Replace original page output with new output from redirected
+          // page(s).
           if ($new = $this->checkForMetaRefresh()) {
             $out = $new;
           }
@@ -1634,9 +1659,10 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Check for meta refresh tag and if found call drupalGet() recursively. This
-   * function looks for the http-equiv attribute to be set to "Refresh"
-   * and is case-sensitive.
+   * Checks for meta refresh tag and if found call drupalGet() recursively.
+   *
+   * This function looks for the http-equiv attribute to be set to "Refresh" and
+   * is case-sensitive.
    *
    * @return
    *   Either the new page content or FALSE.
@@ -1665,6 +1691,7 @@ abstract class WebTestBase extends TestBase {
    * @param $headers
    *   An array containing additional HTTP request headers, each formatted as
    *   "name: value".
+   *
    * @return
    *   The retrieved headers, also available as $this->drupalGetContent()
    */
@@ -1672,7 +1699,8 @@ abstract class WebTestBase extends TestBase {
     $options['absolute'] = TRUE;
     $url = $this->container->get('url_generator')->generateFromPath($path, $options);
     $out = $this->curlExec(array(CURLOPT_NOBODY => TRUE, CURLOPT_URL => $url, CURLOPT_HTTPHEADER => $headers));
-    $this->refreshVariables(); // Ensure that any changes to variables in the other thread are picked up.
+    // Ensure that any changes to variables in the other thread are picked up.
+    $this->refreshVariables();
 
     if ($this->dumpHeaders) {
       $this->verbose('GET request to: ' . $path .
@@ -1684,9 +1712,10 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Handle form input related to drupalPost(). Ensure that the specified fields
-   * exist and attempt to create POST data in the correct manner for the particular
-   * field type.
+   * Handles form input related to drupalPost().
+   *
+   * Ensure that the specified fields exist and attempt to create POST data in
+   * the correct manner for the particular field type.
    *
    * @param $post
    *   Reference to array of post values.
@@ -1696,6 +1725,7 @@ abstract class WebTestBase extends TestBase {
    *   Form submit button value.
    * @param $form
    *   Array of form elements.
+   *
    * @return
    *   Submit value matches a valid submit input in the form.
    */
@@ -1856,6 +1886,7 @@ abstract class WebTestBase extends TestBase {
    *   An array of arguments with keys in the form ':name' matching the
    *   placeholders in the query. The values may be either strings or numeric
    *   values.
+   *
    * @return
    *   An XPath query with arguments replaced.
    */
@@ -1877,17 +1908,25 @@ abstract class WebTestBase extends TestBase {
         // Return the string.
         $value = count($parts) > 1 ? 'concat(' . implode(', \'"\', ', $parts) . ')' : $parts[0];
       }
-      $xpath = preg_replace('/' . preg_quote($placeholder) . '\b/', $value, $xpath);
+
+      // Use preg_replace_callback() instead of preg_replace() to prevent the
+      // regular expression engine from trying to substitute backreferences.
+      $replacement = function ($matches) use ($value) {
+        return $value;
+      };
+      $xpath = preg_replace_callback('/' . preg_quote($placeholder) . '\b/', $replacement, $xpath);
     }
     return $xpath;
   }
 
   /**
-   * Perform an xpath search on the contents of the internal browser. The search
-   * is relative to the root element (HTML tag normally) of the page.
+   * Performs an xpath search on the contents of the internal browser.
+   *
+   * The search is relative to the root element (HTML tag normally) of the page.
    *
    * @param $xpath
    *   The xpath string to use in the search.
+   *
    * @return
    *   The return value of the xpath search. For details on the xpath string
    *   format and return values see the SimpleXML documentation,
@@ -1912,6 +1951,7 @@ abstract class WebTestBase extends TestBase {
    *
    * @param $element
    *   The element for which to get the options.
+   *
    * @return
    *   Option elements in select.
    */
@@ -1932,8 +1972,9 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if a link with the specified label is found, and optional with the
-   * specified index.
+   * Passes if a link with the specified label is found.
+   *
+   * An optional link index may be passed.
    *
    * @param $label
    *   Text between the anchor tags.
@@ -1948,6 +1989,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -1958,7 +2000,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if a link with the specified label is not found.
+   * Passes if a link with the specified label is not found.
    *
    * @param $label
    *   Text between the anchor tags.
@@ -1973,6 +2015,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE if the assertion succeeded, FALSE otherwise.
    */
@@ -1983,7 +2026,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if a link containing a given href (part) is found.
+   * Passes if a link containing a given href (part) is found.
    *
    * @param $href
    *   The full or partial value of the 'href' attribute of the anchor tag.
@@ -2009,7 +2052,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if a link containing a given href (part) is not found.
+   * Passes if a link containing a given href (part) is not found.
    *
    * @param $href
    *   The full or partial value of the 'href' attribute of the anchor tag.
@@ -2043,6 +2086,7 @@ abstract class WebTestBase extends TestBase {
    *   Text between the anchor tags.
    * @param $index
    *   Link position counting from zero.
+   *
    * @return
    *   Page on success, or FALSE on failure.
    */
@@ -2054,7 +2098,7 @@ abstract class WebTestBase extends TestBase {
       $url_target = $this->getAbsoluteUrl($urls[$index]['href']);
     }
 
-    $this->assertTrue(isset($urls[$index]), t('Clicked link %label (@url_target) from @url_before', array('%label' => $label, '@url_target' => $url_target, '@url_before' => $url_before)), t('Browser'));
+    $this->assertTrue(isset($urls[$index]), String::format('Clicked link %label (@url_target) from @url_before', array('%label' => $label, '@url_target' => $url_target, '@url_before' => $url_before)), 'Browser');
 
     if (isset($url_target)) {
       return $this->drupalGet($url_target);
@@ -2067,6 +2111,7 @@ abstract class WebTestBase extends TestBase {
    *
    * @param $path
    *   A path from the internal browser content.
+   *
    * @return
    *   The $path with $base_url prepended, if necessary.
    */
@@ -2103,15 +2148,17 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Gets the HTTP response headers of the requested page. Normally we are only
-   * interested in the headers returned by the last request. However, if a page
-   * is redirected or HTTP authentication is in use, multiple requests will be
-   * required to retrieve the page. Headers from all requests may be requested
-   * by passing TRUE to this function.
+   * Gets the HTTP response headers of the requested page.
+   *
+   * Normally we are only interested in the headers returned by the last
+   * request. However, if a page is redirected or HTTP authentication is in use,
+   * multiple requests will be required to retrieve the page. Headers from all
+   * requests may be requested by passing TRUE to this function.
    *
    * @param $all_requests
    *   Boolean value specifying whether to return headers from all requests
    *   instead of just the last request. Defaults to FALSE.
+   *
    * @return
    *   A name/value array if headers from only the last request are requested.
    *   If headers from all requests are requested, an array of name/value
@@ -2153,11 +2200,12 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Gets the value of an HTTP response header. If multiple requests were
-   * required to retrieve the page, only the headers from the last request will
-   * be checked by default. However, if TRUE is passed as the second argument,
-   * all requests will be processed from last to first until the header is
-   * found.
+   * Gets the value of an HTTP response header.
+   *
+   * If multiple requests were required to retrieve the page, only the headers
+   * from the last request will be checked by default. However, if TRUE is
+   * passed as the second argument, all requests will be processed from last to
+   * first until the header is found.
    *
    * @param $name
    *   The name of the header to retrieve. Names are case-insensitive (see RFC
@@ -2165,6 +2213,7 @@ abstract class WebTestBase extends TestBase {
    * @param $all_requests
    *   Boolean value specifying whether to check all requests if the header is
    *   not found in the last request. Defaults to FALSE.
+   *
    * @return
    *   The HTTP header value or FALSE if not found.
    */
@@ -2196,7 +2245,9 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Gets the value of the Drupal.settings JavaScript variable for the currently loaded page.
+   * Gets the value of Drupal.settings for the currently-loaded page.
+   *
+   * Drupal.settings refers to the Drupal.settings JavaScript variable.
    */
   protected function drupalGetSettings() {
     return $this->drupalSettings;
@@ -2206,7 +2257,9 @@ abstract class WebTestBase extends TestBase {
    * Gets an array containing all e-mails sent during this test case.
    *
    * @param $filter
-   *   An array containing key/value pairs used to filter the e-mails that are returned.
+   *   An array containing key/value pairs used to filter the e-mails that are
+   *   returned.
+   *
    * @return
    *   An array containing e-mail messages captured during the current test.
    */
@@ -2227,13 +2280,14 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Sets the raw HTML content. This can be useful when a page has been fetched
-   * outside of the internal browser and assertions need to be made on the
-   * returned page.
+   * Sets the raw HTML content.
    *
-   * A good example would be when testing HTTP request made by Drupal. After fetching
-   * the page the content can be set and page elements can be checked to ensure
-   * that the function worked properly.
+   * This can be useful when a page has been fetched outside of the internal
+   * browser and assertions need to be made on the returned page.
+   *
+   * A good example would be when testing HTTP request made by Drupal. After
+   * fetching the page the content can be set and page elements can be checked
+   * to ensure that the function worked properly.
    */
   protected function drupalSetContent($content, $url = 'internal:') {
     $this->content = $content;
@@ -2247,14 +2301,16 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Sets the value of the Drupal.settings JavaScript variable for the currently loaded page.
+   * Sets the value of Drupal.settings for the currently-loaded page.
+   *
+   * Drupal.settings refers to the Drupal.settings JavaScript variable.
    */
   protected function drupalSetSettings($settings) {
     $this->drupalSettings = $settings;
   }
 
   /**
-   * Pass if the internal browser's URL matches the given path.
+   * Passes if the internal browser's URL matches the given path.
    *
    * @param $path
    *   The expected system path.
@@ -2284,8 +2340,9 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if the raw text IS found on the loaded page, fail otherwise. Raw text
-   * refers to the raw HTML that the page generated.
+   * Passes if the raw text IS found on the loaded page, fail otherwise.
+   *
+   * Raw text refers to the raw HTML that the page generated.
    *
    * @param $raw
    *   Raw (HTML) string to look for.
@@ -2298,6 +2355,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2309,8 +2367,9 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if the raw text is NOT found on the loaded page, fail otherwise. Raw text
-   * refers to the raw HTML that the page generated.
+   * Passes if the raw text is NOT found on the loaded page, fail otherwise.
+   *
+   * Raw text refers to the raw HTML that the page generated.
    *
    * @param $raw
    *   Raw (HTML) string to look for.
@@ -2323,6 +2382,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2334,9 +2394,11 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if the text IS found on the text version of the page. The text version
-   * is the equivalent of what a user would see when viewing through a web browser.
-   * In other words the HTML has been filtered out of the contents.
+   * Passes if the text IS found on the text version of the page.
+   *
+   * The text version is the equivalent of what a user would see when viewing
+   * through a web browser. In other words the HTML has been filtered out of the
+   * contents.
    *
    * @param $text
    *   Plain text to look for.
@@ -2349,6 +2411,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2357,9 +2420,11 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if the text is NOT found on the text version of the page. The text version
-   * is the equivalent of what a user would see when viewing through a web browser.
-   * In other words the HTML has been filtered out of the contents.
+   * Passes if the text is NOT found on the text version of the page.
+   *
+   * The text version is the equivalent of what a user would see when viewing
+   * through a web browser. In other words the HTML has been filtered out of the
+   * contents.
    *
    * @param $text
    *   Plain text to look for.
@@ -2372,6 +2437,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2397,6 +2463,7 @@ abstract class WebTestBase extends TestBase {
    *   this default.
    * @param $not_exists
    *   TRUE if this text should not exist, FALSE if it should.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2411,7 +2478,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if the text is found ONLY ONCE on the text version of the page.
+   * Passes if the text is found ONLY ONCE on the text version of the page.
    *
    * The text version is the equivalent of what a user would see when viewing
    * through a web browser. In other words the HTML has been filtered out of
@@ -2428,6 +2495,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2436,7 +2504,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Pass if the text is found MORE THAN ONCE on the text version of the page.
+   * Passes if the text is found MORE THAN ONCE on the text version of the page.
    *
    * The text version is the equivalent of what a user would see when viewing
    * through a web browser. In other words the HTML has been filtered out of
@@ -2453,6 +2521,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2477,7 +2546,9 @@ abstract class WebTestBase extends TestBase {
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
    * @param $be_unique
-   *   TRUE if this text should be found only once, FALSE if it should be found more than once.
+   *   TRUE if this text should be found only once, FALSE if it should be found
+   *   more than once.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2498,7 +2569,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Will trigger a pass if the Perl regex pattern is found in the raw content.
+   * Triggers a pass if the Perl regex pattern is found in the raw content.
    *
    * @param $pattern
    *   Perl regex to look for including the regex delimiters.
@@ -2511,6 +2582,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2522,7 +2594,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Will trigger a pass if the perl regex pattern is not present in raw content.
+   * Triggers a pass if the perl regex pattern is not found in raw content.
    *
    * @param $pattern
    *   Perl regex to look for including the regex delimiters.
@@ -2535,6 +2607,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2559,6 +2632,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2587,6 +2661,7 @@ abstract class WebTestBase extends TestBase {
    *   in test output. Use 'Debug' to indicate this is debugging output. Do not
    *   translate this string. Defaults to 'Other'; most tests do not override
    *   this default.
+   *
    * @return
    *   TRUE on pass, FALSE on fail.
    */
@@ -2624,7 +2699,11 @@ abstract class WebTestBase extends TestBase {
    *   TRUE on pass, FALSE on fail.
    */
   protected function assertThemeOutput($callback, array $variables = array(), $expected, $message = '', $group = 'Other') {
-    $output = theme($callback, $variables);
+    $build = array('#theme' => $callback);
+    foreach($variables as $key => $variable) {
+      $build["#$key"] = $variable;
+    }
+    $output = drupal_render($build);
     $this->verbose('Variables:' . '<pre>' .  check_plain(var_export($variables, TRUE)) . '</pre>'
       . '<hr />' . 'Result:' . '<pre>' .  check_plain(var_export($output, TRUE)) . '</pre>'
       . '<hr />' . 'Expected:' . '<pre>' .  check_plain(var_export($expected, TRUE)) . '</pre>'
@@ -2698,6 +2777,7 @@ abstract class WebTestBase extends TestBase {
    *
    * @param $element
    *   SimpleXMLElement select element.
+   *
    * @return
    *   The selected value or FALSE.
    */
@@ -2754,7 +2834,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Asserts that a field exists in the current page with the given name and value.
+   * Asserts that a field exists with the given name and value.
    *
    * @param $name
    *   Name of field to assert.
@@ -2815,7 +2895,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Asserts that a field exists in the current page with the given id and value.
+   * Asserts that a field exists with the given id and value.
    *
    * @param $id
    *   Id of field to assert.
@@ -3092,7 +3172,7 @@ abstract class WebTestBase extends TestBase {
   }
 
   /**
-   * Helper function: construct an XPath for the given set of attributes and value.
+   * Helper: Constructs an XPath for the given set of attributes and value.
    *
    * @param $attribute
    *   Field attributes.
@@ -3163,7 +3243,8 @@ abstract class WebTestBase extends TestBase {
    * The field in $name must have the content described in $value.
    *
    * @param $name
-   *   Name of field or message property to assert. Examples: subject, body, id, ...
+   *   Name of field or message property to assert. Examples: subject, body,
+   *   id, ...
    * @param $value
    *   Value of the field to assert.
    * @param $message
@@ -3282,7 +3363,6 @@ abstract class WebTestBase extends TestBase {
    *
    * @param bool $clean_urls
    *   Whether to mock the request using clean urls.
-   *
    * @param $override_server_vars
    *   An array of server variables to override.
    *

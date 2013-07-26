@@ -40,7 +40,7 @@ class UserEntityCallbacksTest extends WebTestBase {
    * Test label callback.
    */
   function testLabelCallback() {
-    $this->assertEqual($this->account->label(), $this->account->name, 'The username should be used as label');
+    $this->assertEqual($this->account->label(), $this->account->getUsername(), 'The username should be used as label');
 
     // Setup a random anonymous name to be sure the name is used.
     $name = $this->randomName();
@@ -53,6 +53,6 @@ class UserEntityCallbacksTest extends WebTestBase {
    */
   function testUriCallback() {
     $uri = $this->account->uri();
-    $this->assertEqual('user/' . $this->account->uid, $uri['path'], 'Correct user URI.');
+    $this->assertEqual('user/' . $this->account->id(), $uri['path'], 'Correct user URI.');
   }
 }

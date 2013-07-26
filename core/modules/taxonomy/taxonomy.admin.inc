@@ -159,8 +159,15 @@ function taxonomy_overview_terms($form, &$form_state, Vocabulary $vocabulary) {
   );
   foreach ($current_page as $key => $term) {
     $form['terms'][$key]['#term'] = $term;
+    $indentation = array();
+    if (isset($term->depth) && $term->depth > 0) {
+      $indentation = array(
+        '#theme' => 'indentation',
+        '#size' => $term->depth,
+      );
+    }
     $form['terms'][$key]['term'] = array(
-      '#prefix' => isset($term->depth->value) && $term->depth->value > 0 ? theme('indentation', array('size' => $term->depth->value)) : '',
+      '#prefix' => !empty($indentation) ? drupal_render($indentation) : '',
       '#type' => 'link',
       '#title' => $term->label(),
       '#href' => "taxonomy/term/" . $term->id(),
@@ -388,98 +395,6 @@ function taxonomy_overview_terms_submit($form, &$form_state) {
     $vocabulary->save();
   }
   drupal_set_message(t('The configuration options have been saved.'));
-}
-
-/**
- * Returns a rendered edit form to create a new term associated to the given vocabulary.
- */
-function taxonomy_term_add($vocabulary) {
-  $term = entity_create('taxonomy_term', array('vid' => $vocabulary->id()));
-  if (module_exists('language')) {
-    $term->langcode = language_get_default_langcode('taxonomy_term', $vocabulary->id());
-  }
-  return Drupal::entityManager()->getForm($term);
-}
-
-/**
- * Form builder for the term delete form.
- *
- * @ingroup forms
- * @see taxonomy_term_confirm_delete_submit()
- */
-function taxonomy_term_confirm_delete($form, &$form_state, Term $term) {
-  // Always provide entity id in the same form key as in the entity edit form.
-  $form['tid'] = array('#type' => 'value', '#value' => $term->id());
-
-  $form_state['taxonomy']['vocabulary'] = taxonomy_vocabulary_load($term->bundle());
-  $form['type'] = array('#type' => 'value', '#value' => 'term');
-  $form['name'] = array('#type' => 'value', '#value' => $term->label());
-  $form['vid'] = array('#type' => 'value', '#value' => $term->bundle());
-  $form['delete'] = array('#type' => 'value', '#value' => TRUE);
-  return confirm_form($form,
-    t('Are you sure you want to delete the term %title?',
-      array('%title' => $term->label())),
-    'admin/structure/taxonomy',
-    t('Deleting a term will delete all its children if there are any. This action cannot be undone.'),
-    t('Delete'),
-    t('Cancel'));
-}
-
-/**
- * Submit handler to delete a term after confirmation.
- *
- * @see taxonomy_term_confirm_delete()
- */
-function taxonomy_term_confirm_delete_submit($form, &$form_state) {
-  entity_delete_multiple('taxonomy_term', array($form_state['values']['tid']));
-  taxonomy_check_vocabulary_hierarchy($form_state['taxonomy']['vocabulary'], $form_state['values']);
-  drupal_set_message(t('Deleted term %name.', array('%name' => $form_state['values']['name'])));
-  watchdog('taxonomy', 'Deleted term %name.', array('%name' => $form_state['values']['name']), WATCHDOG_NOTICE);
-  if (!isset($_GET['destination'])) {
-    $form_state['redirect'] = 'admin/structure/taxonomy';
-  }
-  cache_invalidate_tags(array('content' => TRUE));
-  return;
-}
-
-/**
- * Form builder for the vocabulary delete confirmation form.
- *
- * @ingroup forms
- * @see taxonomy_vocabulary_confirm_delete_submit()
- */
-function taxonomy_vocabulary_confirm_delete($form, &$form_state, $vid) {
-  $vocabulary = taxonomy_vocabulary_load($vid);
-
-  // Always provide entity id in the same form key as in the entity edit form.
-  $form['vid'] = array('#type' => 'value', '#value' => $vid);
-
-  $form_state['taxonomy']['vocabulary'] = $vocabulary;
-  $form['#id'] = 'taxonomy_vocabulary_confirm_delete';
-  $form['type'] = array('#type' => 'value', '#value' => 'vocabulary');
-  $form['name'] = array('#type' => 'value', '#value' => $vocabulary->name);
-  $form['#submit'] = array('taxonomy_vocabulary_confirm_delete_submit');
-  return confirm_form($form,
-    t('Are you sure you want to delete the vocabulary %title?',
-      array('%title' => $vocabulary->label())),
-    'admin/structure/taxonomy',
-    t('Deleting a vocabulary will delete all the terms in it. This action cannot be undone.'),
-    t('Delete'),
-    t('Cancel'));
-}
-
-/**
- * Submit handler to delete a vocabulary after confirmation.
- *
- * @see taxonomy_vocabulary_confirm_delete()
- */
-function taxonomy_vocabulary_confirm_delete_submit($form, &$form_state) {
-  $form_state['taxonomy']['vocabulary']->delete();
-  drupal_set_message(t('Deleted vocabulary %name.', array('%name' => $form_state['values']['name'])));
-  watchdog('taxonomy', 'Deleted vocabulary %name.', array('%name' => $form_state['values']['name']), WATCHDOG_NOTICE);
-  $form_state['redirect'] = 'admin/structure/taxonomy';
-  cache_invalidate_tags(array('content' => TRUE));
-  return;
 }
 
 /**
