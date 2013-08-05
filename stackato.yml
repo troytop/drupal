@@ -3,10 +3,10 @@ instances: 1
 framework: php
 mem: 256M
 services:
-  dev-db: mysql
-  dev-fs: filesystem
-#   prod-db: mysql
-#   prod-fs: filesystem
+ dev-db: mysql
+ dev-fs: filesystem
+#  prod-db: mysql
+#  prod-fs: filesystem
 
 hooks:
   pre-running:
