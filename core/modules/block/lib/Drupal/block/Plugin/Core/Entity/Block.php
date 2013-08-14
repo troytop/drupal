@@ -105,7 +105,7 @@ class Block extends ConfigEntityBase implements BlockInterface {
   public function __construct(array $values, $entity_type) {
     parent::__construct($values, $entity_type);
 
-    $this->pluginBag = new BlockPluginBag(\Drupal::service('plugin.manager.block'), array($this->plugin), $this);
+    $this->pluginBag = new BlockPluginBag(\Drupal::service('plugin.manager.block'), array($this->plugin), $this->get('settings'), $this->id());
   }
 
   /**
@@ -169,7 +169,27 @@ class Block extends ConfigEntityBase implements BlockInterface {
    * {@inheritdoc}
    */
   public function preSave(EntityStorageControllerInterface $storage_controller) {
-    $this->set('settings', $this->getPlugin()->getConfig());
+    $this->set('settings', $this->getPlugin()->getConfiguration());
+  }
+
+  /**
+   * Sorts active blocks by weight; sorts inactive blocks by name.
+   */
+  public static function sort($a, $b) {
+    // Separate enabled from disabled.
+    $status = $b->get('status') - $a->get('status');
+    if ($status) {
+      return $status;
+    }
+    // Sort by weight, unless disabled.
+    if ($a->get('region') != BLOCK_REGION_NONE) {
+      $weight = $a->get('weight') - $b->get('weight');
+      if ($weight) {
+        return $weight;
+      }
+    }
+    // Sort by label.
+    return strcmp($a->label(), $b->label());
   }
 
 }

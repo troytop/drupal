@@ -352,7 +352,6 @@ class FieldInstance extends ConfigEntityBase implements FieldInstanceInterface {
    *   In case of failures at the configuration storage level.
    */
   protected function saveNew() {
-    $module_handler = \Drupal::moduleHandler();
     $instance_controller = \Drupal::entityManager()->getStorageController($this->entityType);
 
     // Check that the field can be attached to this entity type.
@@ -360,11 +359,8 @@ class FieldInstance extends ConfigEntityBase implements FieldInstanceInterface {
       throw new FieldException(format_string('Attempt to create an instance of field @field_id on forbidden entity type @entity_type.', array('@field_id' => $this->field->id, '@entity_type' => $this->entity_type)));
     }
 
-    // Assign the ID.
-    $this->id = $this->id();
-
     // Ensure the field instance is unique within the bundle.
-    if ($prior_instance = $instance_controller->load($this->id)) {
+    if ($prior_instance = $instance_controller->load($this->id())) {
       throw new FieldException(format_string('Attempt to create an instance of field @field_id on bundle @bundle that already has an instance of that field.', array('@field_id' => $this->field->id, '@bundle' => $this->bundle)));
     }
 
@@ -394,7 +390,6 @@ class FieldInstance extends ConfigEntityBase implements FieldInstanceInterface {
    *   In case of failures at the configuration storage level.
    */
   protected function saveUpdated() {
-    $module_handler = \Drupal::moduleHandler();
     $instance_controller = \Drupal::entityManager()->getStorageController($this->entityType);
 
     $original = $instance_controller->loadUnchanged($this->getOriginalID());
@@ -425,7 +420,7 @@ class FieldInstance extends ConfigEntityBase implements FieldInstanceInterface {
    * Prepares the instance definition for saving.
    */
   protected function prepareSave() {
-    $field_type_info = field_info_field_types($this->field->type);
+    $field_type_info = \Drupal::service('plugin.manager.entity.field.field_type')->getDefinition($this->field->type);
 
     // Set the default instance settings.
     $this->settings += $field_type_info['instance_settings'];

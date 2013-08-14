@@ -366,12 +366,14 @@ abstract class WebTestBase extends TestBase {
       'plugin' => $plugin_id,
       'region' => 'sidebar_first',
       'machine_name' => strtolower($this->randomName(8)),
-      'theme' => config('system.theme')->get('default'),
+      'theme' => \Drupal::config('system.theme')->get('default'),
       'label' => $this->randomName(8),
       'visibility' => array(),
+      'weight' => 0,
     );
-    foreach (array('region', 'machine_name', 'theme', 'plugin', 'visibility') as $key) {
+    foreach (array('region', 'machine_name', 'theme', 'plugin', 'visibility', 'weight') as $key) {
       $values[$key] = $settings[$key];
+      // Remove extra values that do not belong in the settings array.
       unset($settings[$key]);
     }
     $values['settings'] = $settings;
@@ -788,7 +790,7 @@ abstract class WebTestBase extends TestBase {
     // Set 'parent_profile' of simpletest to add the parent profile's
     // search path to the child site's search paths.
     // @see drupal_system_listing()
-    config('simpletest.settings')->set('parent_profile', $this->originalProfile)->save();
+    \Drupal::config('simpletest.settings')->set('parent_profile', $this->originalProfile)->save();
 
     // Collect modules to install.
     $class = get_class($this);
@@ -812,7 +814,7 @@ abstract class WebTestBase extends TestBase {
     // Now make sure that the file path configurations are saved. This is done
     // after we install the modules to override default values.
     foreach ($variable_groups as $config_base => $variables) {
-      $config = config($config_base);
+      $config = \Drupal::config($config_base);
       foreach ($variables as $name => $value) {
         $config->set($name, $value);
       }
@@ -821,7 +823,7 @@ abstract class WebTestBase extends TestBase {
     variable_set('file_public_path', $this->public_files_directory);
 
     // Use the test mail class instead of the default mail handler class.
-    config('system.mail')->set('interface.default', 'Drupal\Core\Mail\VariableLog')->save();
+    \Drupal::config('system.mail')->set('interface.default', 'Drupal\Core\Mail\VariableLog')->save();
 
     drupal_set_time_limit($this->timeLimit);
     // Temporary fix so that when running from run-tests.sh we don't get an
@@ -1402,13 +1404,18 @@ abstract class WebTestBase extends TestBase {
         if (!$edit && ($submit_matches || !isset($submit))) {
           $post_array = $post;
           if ($upload) {
-            // TODO: cURL handles file uploads for us, but the implementation
-            // is broken. This is a less than elegant workaround. Alternatives
-            // are being explored at #253506.
             foreach ($upload as $key => $file) {
               $file = drupal_realpath($file);
               if ($file && is_file($file)) {
-                $post[$key] = '@' . $file;
+                // Use the new CurlFile class for file uploads when using PHP
+                // 5.5.
+                if (class_exists('CurlFile')) {
+                  $post[$key] = curl_file_create($file);
+                }
+                else {
+                  // @todo: Drop support for this when PHP 5.5 is required.
+                  $post[$key] = '@' . $file;
+                }
               }
             }
           }

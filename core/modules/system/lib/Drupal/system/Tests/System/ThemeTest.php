@@ -115,7 +115,10 @@ class ThemeTest extends WebTestBase {
 
       // Verify the actual 'src' attribute of the logo being output.
       $this->drupalGet('');
-      $elements = $this->xpath('//*[@id=:id]/img', array(':id' => 'logo'));
+      $elements = $this->xpath('//header/a[@rel=:rel]/img', array(
+          ':rel' => 'home',
+        )
+      );
       $this->assertEqual((string) $elements[0]['src'], $expected['src']);
     }
     $unsupported_paths = array(
@@ -163,7 +166,10 @@ class ThemeTest extends WebTestBase {
     $uploaded_filename = 'public://' . $fields[0]['value'];
 
     $this->drupalGet('');
-    $elements = $this->xpath('//*[@id=:id]/img', array(':id' => 'logo'));
+    $elements = $this->xpath('//header/a[@rel=:rel]/img', array(
+        ':rel' => 'home',
+      )
+    );
     $this->assertEqual($elements[0]['src'], file_create_url($uploaded_filename));
   }
 
@@ -205,7 +211,7 @@ class ThemeTest extends WebTestBase {
     $this->assertRaw('core/themes/stark', 'Site default theme used on the add content page.');
 
     // Reset to the default theme settings.
-    config('system.theme')
+    \Drupal::config('system.theme')
       ->set('default', 'bartik')
       ->save();
     $edit = array(
@@ -229,7 +235,7 @@ class ThemeTest extends WebTestBase {
     theme_enable(array('bartik'));
     $this->drupalGet('admin/appearance');
     $this->clickLink(t('Set default'));
-    $this->assertEqual(config('system.theme')->get('default'), 'bartik');
+    $this->assertEqual(\Drupal::config('system.theme')->get('default'), 'bartik');
 
     drupal_flush_all_caches();
 
